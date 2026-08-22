@@ -1,0 +1,100 @@
+# Walmart Global Tech — SWE-3 (SDE-2 equivalent), India (Bangalore / Chennai)
+# CONFIDENCE: seeded-unverified.
+id: walmart-global-tech
+display_name: Walmart Global Tech
+target_role:
+  title: Software Engineer III
+  level_code: SWE-3 (SDE-2 equivalent)
+  location_context: India (Bangalore / Chennai)
+difficulty: medium
+
+calibration:
+  confidence: seeded-unverified
+  last_updated: "2026-08-22"
+  sources: []
+  notes: |
+    Seeded from the brief (DSA + scale-heavy HLD). Retail-scale framing (catalog,
+    inventory, order management, peak-season traffic) is the recurring theme.
+
+    LEVEL NOTE: the seed table listed Walmart as "SWE-4/Sr". That is the senior band;
+    at ~2 years of experience the SDE-2-equivalent target is SWE-3, which this profile
+    is calibrated to. The HLD round stays the heaviest round but is scoped medium-hard
+    rather than senior-level. Verify the number of DSA rounds — some loops run two, some
+    run one plus a longer design block.
+
+emphasis:
+  dsa: 0.35
+  lld: 0.15
+  hld: 0.35
+  cs_fundamentals: 0.05
+  java_deep_dive: 0.05
+  behavioral: 0.05
+
+loop:
+  total_wall_clock_min: 255
+  difficulty_curve: rising
+  rounds:
+    - ordinal: 1
+      module: dsa
+      name: Coding screen
+      stage: screen
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [arrays, strings, hashing, sorting]
+    - ordinal: 2
+      module: dsa
+      name: Onsite — coding
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [trees, graphs, heaps, dp-basics]
+    - ordinal: 3
+      module: hld
+      name: Onsite — system design at scale
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [inventory, order-management, peak-traffic, caching, sharding, idempotency]
+      notes: The heaviest round. Retail-scale framing with hard peak-load constraints.
+    - ordinal: 4
+      module: lld
+      name: Onsite — low-level design
+      stage: onsite
+      duration_min: 45
+      difficulty_target: medium
+      focus_tags: [oop, solid, domain-modelling]
+    - ordinal: 5
+      module: behavioral
+      name: Hiring manager / leadership
+      stage: final
+      duration_min: 30
+      difficulty_target: easy
+      enabled_in_v1: false
+
+quirks:
+  - id: retail-peak-load
+    label: Peak-load framing is the recurring theme
+    description: >
+      Expect the design prompt to include a seasonal traffic spike an order of magnitude
+      above baseline. Designs that only work at average load fail this round.
+    applies_to_rounds: [3]
+    interviewer_behavior: |
+      Frame the design in a retail context — catalog, cart, inventory, or order
+      management. Once the candidate has a baseline design, impose a seasonal peak an
+      order of magnitude above normal traffic and make them show what breaks first and
+      how they'd absorb it. Push specifically on inventory correctness under concurrent
+      purchase — overselling is the canonical failure and they should reach for
+      reservations, optimistic locking, or an equivalent mechanism by name.
+  - id: cost-consciousness
+    label: Cost of the design comes up
+    description: >
+      Unlike pure scale interviews, Walmart rounds often ask what the architecture costs
+      to run and where you'd trade latency for money.
+    applies_to_rounds: [3]
+
+readiness:
+  bar_band: hire
+  module_minimums:
+    hld: 3.5
+    dsa: 3.5
+  min_sessions_for_confidence: 3
