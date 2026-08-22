@@ -2,6 +2,9 @@ package com.premd.interviewloop.transport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.premd.interviewloop.interviewer.ModuleRegistry;
+import com.premd.interviewloop.session.TurnOrchestrator;
+import com.premd.interviewloop.session.TurnSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -22,8 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 4. Model returns prose + tool calls (record_signal, advance_phase, etc.)
  * 5. Backend persists turn, applies/rejects control calls, updates round state
  *
- * This is the foundation — actual LLM integration is wired in subsequent phases
- * when interviewer modules are built.
+ * The turn itself is run by {@link TurnOrchestrator}; this class only moves frames. When a round
+ * asks for a module that Phases 2–5 have not built yet, it says so plainly rather than pretending
+ * to conduct an interview.
  */
 @Component
 public class InterviewWebSocketHandler extends TextWebSocketHandler {
@@ -31,12 +35,14 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(InterviewWebSocketHandler.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final FrameCodec frameCodec;
+    private final TurnOrchestrator turnOrchestrator;
 
     /** Active WebSocket sessions keyed by session ID. */
     private final Map<String, WebSocketSession> activeSessions = new ConcurrentHashMap<>();
 
-    public InterviewWebSocketHandler(FrameCodec frameCodec) {
+    public InterviewWebSocketHandler(FrameCodec frameCodec, TurnOrchestrator turnOrchestrator) {
         this.frameCodec = frameCodec;
+        this.turnOrchestrator = turnOrchestrator;
     }
 
     @Override
@@ -87,14 +93,19 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
         log.debug("Candidate turn for round {}: {} chars, artifact: {}",
                 roundId, text.length(), artifact != null ? artifact.length() + " chars" : "none");
 
-        // Acknowledge receipt — actual LLM call will be added when interviewer modules exist
         sendFrame(session, frameCodec.acknowledgeTurn(roundId));
 
-        // TODO: Wire through session manager → interviewer module → LLM provider → stream back
-        // For now, echo back a placeholder to prove the transport works
-        sendFrame(session, frameCodec.textDelta(
-                "Turn received. Interviewer modules will be wired in Phase 2+."));
-        sendFrame(session, frameCodec.turnComplete(roundId));
+        TurnSink sink = new WebSocketTurnSink(session, frameCodec);
+        try {
+            turnOrchestrator.handleCandidateTurn(roundId, text, artifact, sink);
+        } catch (ModuleRegistry.ModuleNotAvailableException e) {
+            sink.error(notImplementedMessage(e));
+            sink.turnComplete(roundId);
+        } catch (Exception e) {
+            log.error("Turn failed for round {}", roundId, e);
+            sink.error(e.getMessage());
+            sink.turnComplete(roundId);
+        }
     }
 
     private void handleStartRound(WebSocketSession session, JsonNode frame) throws IOException {
@@ -104,7 +115,21 @@ public class InterviewWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        sendFrame(session, frameCodec.roundStarted(roundId));
+        TurnSink sink = new WebSocketTurnSink(session, frameCodec);
+        try {
+            turnOrchestrator.beginRound(roundId, sink);
+            sendFrame(session, frameCodec.roundStarted(roundId));
+        } catch (ModuleRegistry.ModuleNotAvailableException e) {
+            sink.error(notImplementedMessage(e));
+        } catch (Exception e) {
+            log.error("Could not start round {}", roundId, e);
+            sink.error(e.getMessage());
+        }
+    }
+
+    private String notImplementedMessage(ModuleRegistry.ModuleNotAvailableException e) {
+        return "The " + e.getModuleType().getValue() + " interviewer has not been built yet. "
+                + "Session setup, transport and persistence all work; the module lands in a later phase.";
     }
 
     public void sendFrame(WebSocketSession session, String json) throws IOException {

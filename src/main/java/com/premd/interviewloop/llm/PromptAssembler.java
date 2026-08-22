@@ -76,4 +76,42 @@ public class PromptAssembler {
                 .conversationMessages(conversationMessages)
                 .maxTokens(maxTokens);
     }
+
+    /**
+     * Assemble a turn that carries a phase directive.
+     *
+     * <p>The directive is what the interviewer should be doing right now, given the round's
+     * current phase, hint level and remaining time. It is volatile by nature, so it goes
+     * <b>after</b> the transcript and before the artifact — never in the system block, which
+     * would invalidate the cached prefix on every single turn.
+     *
+     * @param phaseDirective volatile per-turn instruction; may be null
+     */
+    public LlmRequest assemble(String model,
+                               List<LlmRequest.Tool> tools,
+                               String rubric,
+                               String persona,
+                               String problemStatement,
+                               List<LlmRequest.Message> transcript,
+                               String phaseDirective,
+                               String latestArtifact,
+                               int maxTokens) {
+
+        LlmRequest request = assemble(model, tools, rubric, persona, problemStatement,
+                transcript, null, maxTokens);
+
+        List<LlmRequest.Message> messages = new ArrayList<>(request.getConversationMessages());
+
+        if (phaseDirective != null && !phaseDirective.isBlank()) {
+            messages.add(new LlmRequest.Message("user",
+                    "[Current phase directive]\n" + phaseDirective, false));
+        }
+
+        if (latestArtifact != null && !latestArtifact.isBlank()) {
+            messages.add(new LlmRequest.Message("user",
+                    "[Current code/artifact]\n" + latestArtifact, false));
+        }
+
+        return request.conversationMessages(messages);
+    }
 }

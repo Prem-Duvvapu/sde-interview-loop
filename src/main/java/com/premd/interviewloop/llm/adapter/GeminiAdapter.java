@@ -1,6 +1,7 @@
 package com.premd.interviewloop.llm.adapter;
 
 import com.google.genai.Client;
+import com.google.genai.ResponseStream;
 import com.google.genai.types.*;
 import com.premd.interviewloop.llm.*;
 import com.premd.interviewloop.llm.Capabilities.PromptCachingMode;
@@ -61,135 +62,133 @@ public class GeminiAdapter implements LlmProvider {
     }
 
     private void streamInternal(LlmRequest request, FluxSink<LlmEvent> sink) {
-        // Build system instruction from system messages
-        StringBuilder systemInstruction = new StringBuilder();
-        if (request.getSystemMessages() != null) {
-            for (LlmRequest.Message msg : request.getSystemMessages()) {
-                if (!systemInstruction.isEmpty()) systemInstruction.append("\n\n");
-                systemInstruction.append(msg.getContent());
+        GenerateContentConfig config = buildConfig(request);
+        List<Content> contents = buildContents(request);
+        String modelId = request.getModel();
+        if (modelId == null || modelId.isBlank()) {
+            throw new IllegalArgumentException("No model specified for Gemini request");
+        }
+
+        LlmEvent.Usage usage = null;
+
+        // Real streaming, not a single blocking call dressed up as a stream: this adapter
+        // declares streaming = true, and the interviewer capability floor requires it.
+        try (ResponseStream<GenerateContentResponse> stream =
+                     client.models.generateContentStream(modelId, contents, config)) {
+
+            for (GenerateContentResponse chunk : stream) {
+                for (Part part : partsOf(chunk)) {
+                    part.text().filter(t -> !t.isEmpty())
+                            .ifPresent(t -> sink.next(LlmEvent.textDelta(t)));
+
+                    part.functionCall().ifPresent(fc -> sink.next(LlmEvent.toolCall(
+                            fc.name().orElse("unknown"),
+                            fc.id().orElseGet(() -> UUID.randomUUID().toString()),
+                            new LinkedHashMap<>(fc.args().orElse(Map.of())))));
+                }
+
+                // Usage arrives on the trailing chunks and is cumulative, so the last one wins.
+                LlmEvent.Usage chunkUsage = usageOf(chunk);
+                if (chunkUsage != null) {
+                    usage = chunkUsage;
+                }
             }
         }
 
-        // Build conversation contents
+        if (usage != null) {
+            sink.next(LlmEvent.usage(usage));
+        }
+        sink.next(LlmEvent.done());
+        sink.complete();
+    }
+
+    private List<Part> partsOf(GenerateContentResponse chunk) {
+        return chunk.candidates()
+                .filter(list -> !list.isEmpty())
+                .map(list -> list.get(0))
+                .flatMap(Candidate::content)
+                .flatMap(Content::parts)
+                .orElse(List.of());
+    }
+
+    private LlmEvent.Usage usageOf(GenerateContentResponse chunk) {
+        return chunk.usageMetadata()
+                .map(um -> new LlmEvent.Usage(
+                        um.promptTokenCount().orElse(0),
+                        um.candidatesTokenCount().orElse(0),
+                        um.cachedContentTokenCount().orElse(0),
+                        // Gemini bills cache creation through its cached-content objects rather
+                        // than reporting cache-write tokens on the response.
+                        0))
+                .orElse(null);
+    }
+
+    private List<Content> buildContents(LlmRequest request) {
         List<Content> contents = new ArrayList<>();
         if (request.getConversationMessages() != null) {
             for (LlmRequest.Message msg : request.getConversationMessages()) {
-                String role = "user".equals(msg.getRole()) ? "user" : "model";
+                // Gemini has no "system" role inside contents; system text is hoisted into
+                // systemInstruction, so anything left here is either candidate or interviewer.
+                String role = "assistant".equals(msg.getRole()) ? "model" : "user";
                 contents.add(Content.builder()
                         .role(role)
-                        .addPart(Part.builder().text(msg.getContent()).build())
+                        .parts(List.of(Part.fromText(msg.getContent())))
                         .build());
             }
         }
-
-        // If no conversation messages, add a minimal user message
         if (contents.isEmpty()) {
             contents.add(Content.builder()
                     .role("user")
-                    .addPart(Part.builder().text("Begin.").build())
+                    .parts(List.of(Part.fromText("Begin.")))
                     .build());
         }
+        return contents;
+    }
 
-        // Build tool declarations if any
-        List<Tool> tools = new ArrayList<>();
-        if (request.getTools() != null && !request.getTools().isEmpty()) {
-            List<FunctionDeclaration> funcDecls = new ArrayList<>();
-            for (LlmRequest.Tool tool : request.getTools()) {
-                FunctionDeclaration.Builder funcBuilder = FunctionDeclaration.builder()
-                        .name(tool.getName())
-                        .description(tool.getDescription());
-                if (tool.getInputSchema() != null) {
-                    funcBuilder.parameters(Schema.builder()
-                            .type("OBJECT")
-                            .properties(convertSchemaProperties(tool.getInputSchema()))
-                            .build());
-                }
-                funcDecls.add(funcBuilder.build());
-            }
-            tools.add(Tool.builder().functionDeclarations(funcDecls).build());
-        }
-
-        // Build generate config
-        GenerateContentConfig.Builder configBuilder = GenerateContentConfig.builder()
+    private GenerateContentConfig buildConfig(LlmRequest request) {
+        GenerateContentConfig.Builder config = GenerateContentConfig.builder()
                 .candidateCount(1)
                 .maxOutputTokens(request.getMaxTokens())
                 .temperature((float) request.getTemperature());
 
+        String systemInstruction = joinSystemMessages(request);
         if (!systemInstruction.isEmpty()) {
-            configBuilder.systemInstruction(Content.builder()
-                    .addPart(Part.builder().text(systemInstruction.toString()).build())
+            config.systemInstruction(Content.builder()
+                    .parts(List.of(Part.fromText(systemInstruction)))
                     .build());
         }
 
-        if (!tools.isEmpty()) {
-            configBuilder.tools(tools);
-        }
-
-        String modelId = request.getModel() != null ? request.getModel() : "gemini-2.0-flash";
-
-        // Use streaming
-        try {
-            GenerateContentResponse response = client.models.generateContent(
-                    modelId,
-                    contents,
-                    configBuilder.build());
-
-            // Process the response
-            if (response.candidates() != null && !response.candidates().isEmpty()) {
-                Candidate candidate = response.candidates().get(0);
-                if (candidate.content() != null && candidate.content().parts() != null) {
-                    for (Part part : candidate.content().parts()) {
-                        if (part.text() != null) {
-                            sink.next(LlmEvent.textDelta(part.text()));
-                        }
-                        if (part.functionCall() != null) {
-                            FunctionCall fc = part.functionCall();
-                            Map<String, Object> args = fc.args() != null ?
-                                    new LinkedHashMap<>(fc.args()) : Map.of();
-                            sink.next(LlmEvent.toolCall(fc.name(), UUID.randomUUID().toString(), args));
-                        }
-                    }
+        if (request.getTools() != null && !request.getTools().isEmpty()) {
+            List<FunctionDeclaration> declarations = new ArrayList<>();
+            for (LlmRequest.Tool tool : request.getTools()) {
+                FunctionDeclaration.Builder declaration = FunctionDeclaration.builder()
+                        .name(tool.getName())
+                        .description(tool.getDescription());
+                if (tool.getInputSchema() != null) {
+                    // Hand the JSON Schema over whole. Translating it into Schema objects by hand
+                    // silently dropped `required` and `enum`, which is how a model ends up
+                    // omitting a score or inventing a phase name.
+                    declaration.parametersJsonSchema(tool.getInputSchema());
                 }
+                declarations.add(declaration.build());
             }
-
-            // Emit usage if available
-            if (response.usageMetadata() != null) {
-                UsageMetadata um = response.usageMetadata();
-                sink.next(LlmEvent.usage(new LlmEvent.Usage(
-                        um.promptTokenCount() != null ? um.promptTokenCount() : 0,
-                        um.candidatesTokenCount() != null ? um.candidatesTokenCount() : 0,
-                        um.cachedContentTokenCount() != null ? um.cachedContentTokenCount() : 0,
-                        0  // Gemini doesn't report cache write tokens separately
-                )));
-            }
-
-            sink.next(LlmEvent.done());
-            sink.complete();
-
-        } catch (Exception e) {
-            log.error("Gemini API call failed", e);
-            sink.next(LlmEvent.error(e.getMessage()));
-            sink.complete();
+            config.tools(List.of(Tool.builder().functionDeclarations(declarations).build()));
         }
+
+        return config.build();
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Schema> convertSchemaProperties(Map<String, Object> inputSchema) {
-        Map<String, Schema> properties = new LinkedHashMap<>();
-        Object props = inputSchema.get("properties");
-        if (props instanceof Map<?, ?> propsMap) {
-            for (Map.Entry<?, ?> entry : propsMap.entrySet()) {
-                String key = entry.getKey().toString();
-                if (entry.getValue() instanceof Map<?, ?> propDef) {
-                    String type = propDef.getOrDefault("type", "STRING").toString().toUpperCase();
-                    String desc = propDef.getOrDefault("description", "").toString();
-                    properties.put(key, Schema.builder()
-                            .type(type)
-                            .description(desc)
-                            .build());
-                }
-            }
+    private String joinSystemMessages(LlmRequest request) {
+        if (request.getSystemMessages() == null) {
+            return "";
         }
-        return properties;
+        StringBuilder sb = new StringBuilder();
+        for (LlmRequest.Message msg : request.getSystemMessages()) {
+            if (sb.length() > 0) {
+                sb.append("\n\n");
+            }
+            sb.append(msg.getContent());
+        }
+        return sb.toString();
     }
 }
