@@ -1,0 +1,105 @@
+# Postman — SDE-2, India (Bangalore, remote-friendly)
+# CONFIDENCE: seeded-unverified.
+id: postman
+display_name: Postman
+target_role:
+  title: Software Development Engineer II
+  level_code: SDE-2
+  location_context: India (Bangalore), remote-friendly
+difficulty: medium
+
+calibration:
+  confidence: seeded-unverified
+  last_updated: "2026-08-22"
+  sources: []
+  notes: |
+    Seeded from the brief (LLD + practical API design). Postman's product is developer
+    tooling, so API design taste is a genuine scored dimension rather than a proxy. The
+    machine-coding round is the format most worth verifying — Indian product companies
+    of this size often run a 90-120 minute build-a-working-thing round.
+
+emphasis:
+  dsa: 0.20
+  lld: 0.40
+  hld: 0.25
+  cs_fundamentals: 0.05
+  java_deep_dive: 0.05
+  behavioral: 0.05
+
+loop:
+  total_wall_clock_min: 285
+  difficulty_curve: flat
+  rounds:
+    - ordinal: 1
+      module: dsa
+      name: Coding screen
+      stage: screen
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [arrays, strings, hashing, parsing]
+    - ordinal: 2
+      module: lld
+      name: Machine coding round
+      stage: onsite
+      duration_min: 90
+      difficulty_target: medium-hard
+      focus_tags: [working-software, oop, testability, cli-or-api-surface]
+      notes: >
+        Build a small but working system end to end under time pressure. Compiles, runs,
+        and handles the stated cases beats elegant-but-incomplete.
+    - ordinal: 3
+      module: lld
+      name: Design review / extension of your machine-coding solution
+      stage: onsite
+      duration_min: 45
+      difficulty_target: medium-hard
+      focus_tags: [solid, extensibility, refactoring]
+      notes: Defend and extend what you built in the previous round.
+    - ordinal: 4
+      module: hld
+      name: API & system design
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [rest-semantics, versioning, pagination, idempotency, rate-limiting, auth]
+      notes: Developer-tooling framing — the API itself is the product.
+    - ordinal: 5
+      module: behavioral
+      name: Hiring manager round
+      stage: final
+      duration_min: 30
+      difficulty_target: easy
+      enabled_in_v1: false
+
+quirks:
+  - id: api-design-taste
+    label: API design is scored as a first-class skill
+    description: >
+      Resource modelling, status-code semantics, versioning strategy, pagination, and
+      error-body shape are all fair game and are scored on taste, not just correctness.
+    applies_to_rounds: [4]
+    interviewer_behavior: |
+      Treat the API surface as the product, not as a wrapper over the design. Require
+      concrete endpoint definitions — paths, methods, status codes, request and response
+      bodies, error shapes. Probe versioning strategy, pagination choice with its
+      trade-offs, idempotency of unsafe methods, and rate-limit semantics. Ask them to
+      justify REST-vs-alternative rather than defaulting to it silently. Sloppy status
+      codes or a design that leaks internal models into the public surface are real
+      findings — raise them.
+  - id: working-over-perfect
+    label: Machine coding rewards completion
+    description: >
+      A running, testable, incomplete-but-honest solution outscores a beautiful
+      architecture that does not execute.
+    applies_to_rounds: [2]
+    interviewer_behavior: |
+      Prioritize working software. Halfway through, ask what they will cut to finish on
+      time — deliberate scope-cutting is a positive signal, silent overrun is not. At the
+      end, judge first whether it runs and handles the stated cases, and only then judge
+      structure.
+
+readiness:
+  bar_band: hire
+  module_minimums:
+    lld: 3.5
+  min_sessions_for_confidence: 3

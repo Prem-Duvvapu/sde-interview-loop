@@ -1,0 +1,96 @@
+# Salesforce — MTS (Member of Technical Staff), India (Hyderabad / Bangalore)
+# CONFIDENCE: seeded-unverified.
+id: salesforce
+display_name: Salesforce
+target_role:
+  title: Member of Technical Staff
+  level_code: MTS
+  location_context: India (Hyderabad / Bangalore)
+difficulty: medium
+
+calibration:
+  confidence: seeded-unverified
+  last_updated: "2026-08-22"
+  sources: []
+  notes: |
+    Seeded from the brief (DSA + Java/OOP depth). Salesforce is a heavy JVM shop, so the
+    Java deep-dive round is weighted higher here than anywhere else in this directory —
+    it is the profile that best exercises your Spring Boot background. Verify whether
+    your loop includes a take-home; some Salesforce India loops do.
+
+emphasis:
+  dsa: 0.35
+  lld: 0.20
+  hld: 0.10
+  cs_fundamentals: 0.10
+  java_deep_dive: 0.20
+  behavioral: 0.05
+
+loop:
+  total_wall_clock_min: 285
+  difficulty_curve: flat
+  rounds:
+    - ordinal: 1
+      module: dsa
+      name: Coding screen
+      stage: screen
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [arrays, strings, hashing, sorting]
+    - ordinal: 2
+      module: dsa
+      name: Onsite — coding
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [trees, graphs, dp-basics]
+    - ordinal: 3
+      module: java_deep_dive
+      name: Onsite — Java / OOP deep dive
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [collections-internals, concurrency, gc, spring-internals, immutability]
+      notes: The differentiating round for this company. Scenario-based, not trivia.
+    - ordinal: 4
+      module: lld
+      name: Onsite — object-oriented design
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [solid, design-patterns, extensibility]
+    - ordinal: 5
+      module: behavioral
+      name: Hiring manager round
+      stage: final
+      duration_min: 45
+      difficulty_target: easy
+      enabled_in_v1: false
+
+quirks:
+  - id: java-depth-is-the-bar
+    label: Java internals depth is the differentiator
+    description: >
+      Expect to go several layers below API usage — HashMap resize semantics, the
+      memory model, executor tuning, why a Spring bean behaves as it does.
+    applies_to_rounds: [3]
+    interviewer_behavior: |
+      Probe below API usage into implementation. Follow every correct answer with "why
+      is it implemented that way?" and "what breaks if it weren't?" Anchor questions in
+      concrete scenarios — a service degrading under load, an unexpected NPE after a
+      refactor — never in definition recall. The candidate has substantial Spring Boot
+      project experience, so treat framework-level answers as the starting point and
+      push to the JVM and concurrency layer beneath them.
+  - id: multi-tenancy-flavour
+    label: Multi-tenancy shows up in design questions
+    description: >
+      Given Salesforce's platform model, design questions often add a tenant-isolation
+      or noisy-neighbour constraint.
+    applies_to_rounds: [4]
+
+readiness:
+  bar_band: hire
+  module_minimums:
+    java_deep_dive: 3.5
+    dsa: 3.5
+  min_sessions_for_confidence: 3

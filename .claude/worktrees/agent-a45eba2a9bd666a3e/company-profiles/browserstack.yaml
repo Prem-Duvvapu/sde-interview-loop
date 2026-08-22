@@ -1,0 +1,99 @@
+# BrowserStack — SDE-2, India (Mumbai / Bangalore, remote-friendly)
+# CONFIDENCE: seeded-unverified.
+id: browserstack
+display_name: BrowserStack
+target_role:
+  title: Software Engineer II
+  level_code: SDE-2
+  location_context: India (Mumbai / Bangalore), remote-friendly
+difficulty: medium
+
+calibration:
+  confidence: seeded-unverified
+  last_updated: "2026-08-22"
+  sources: []
+  notes: |
+    Seeded from the brief (DSA + infra-leaning HLD). BrowserStack runs a device/browser
+    cloud, so its design questions skew toward infrastructure problems — VM and container
+    orchestration, session scheduling, resource pooling, queueing — rather than
+    consumer-scale feed systems. That makes this profile a good match for your
+    Docker/Kubernetes background and a poor proxy for LinkedIn-style HLD.
+
+emphasis:
+  dsa: 0.35
+  lld: 0.15
+  hld: 0.35
+  cs_fundamentals: 0.10
+  java_deep_dive: 0.0
+  behavioral: 0.05
+
+loop:
+  total_wall_clock_min: 255
+  difficulty_curve: rising
+  rounds:
+    - ordinal: 1
+      module: dsa
+      name: Coding screen
+      stage: screen
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [arrays, strings, hashing, heaps]
+    - ordinal: 2
+      module: dsa
+      name: Onsite — coding / problem solving
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [scheduling, queues, graphs, greedy, simulation]
+      notes: Problems often have a resource-allocation or scheduling flavour.
+    - ordinal: 3
+      module: hld
+      name: Onsite — infrastructure system design
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [resource-pooling, scheduling, container-orchestration, queueing, isolation, observability]
+      notes: The differentiating round. Infra-shaped rather than product-shaped.
+    - ordinal: 4
+      module: cs_fundamentals
+      name: Onsite — systems fundamentals
+      stage: onsite
+      duration_min: 45
+      difficulty_target: medium
+      focus_tags: [os-processes, networking, virtualization, linux-internals]
+    - ordinal: 5
+      module: behavioral
+      name: Hiring manager round
+      stage: final
+      duration_min: 30
+      difficulty_target: easy
+      enabled_in_v1: false
+
+quirks:
+  - id: infra-shaped-design
+    label: Design prompts are infrastructure, not consumer product
+    description: >
+      Expect problems like "schedule test sessions across a finite pool of real devices"
+      rather than "design Twitter". Utilization, queue wait times, and isolation between
+      tenants are the scored dimensions.
+    applies_to_rounds: [3]
+    interviewer_behavior: |
+      Use infrastructure-shaped prompts — scheduling finite hardware, pooling VMs or
+      containers, isolating untrusted customer workloads, streaming logs and video from
+      running sessions. Score utilization versus queue wait time as the central
+      trade-off, and push on what happens when a node dies mid-session. Generic
+      web-scale answers that ignore the finite physical resource pool are missing the
+      point of the question — say so and redirect.
+  - id: practical-ops-bias
+    label: Rewards hands-on operational experience
+    description: >
+      Answers grounded in real Docker/Kubernetes behaviour land better than textbook
+      architecture. Failure modes, resource limits, and noisy-neighbour effects come up.
+    applies_to_rounds: [3, 4]
+
+readiness:
+  bar_band: hire
+  module_minimums:
+    hld: 3.5
+    dsa: 3.5
+  min_sessions_for_confidence: 3

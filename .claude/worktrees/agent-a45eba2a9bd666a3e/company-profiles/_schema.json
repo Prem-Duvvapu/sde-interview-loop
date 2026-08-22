@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sde-interview-loop.local/schemas/company-profile.json",
+  "title": "Company Interview Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "display_name",
+    "target_role",
+    "difficulty",
+    "calibration",
+    "emphasis",
+    "loop",
+    "readiness"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Must equal the filename stem."
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "level_code"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "level_code": {
+          "type": "string"
+        },
+        "location_context": {
+          "type": "string"
+        }
+      }
+    },
+    "difficulty": {
+      "enum": [
+        "medium",
+        "medium-high",
+        "high"
+      ]
+    },
+    "calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confidence",
+        "last_updated"
+      ],
+      "properties": {
+        "confidence": {
+          "enum": [
+            "seeded-unverified",
+            "partially-verified",
+            "verified"
+          ],
+          "description": "seeded-unverified = generated defaults. Raise only from first-hand data."
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "date",
+              "kind",
+              "note"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "kind": {
+                "enum": [
+                  "first-hand",
+                  "recruiter",
+                  "public",
+                  "second-hand"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "emphasis": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Weights used to roll module readiness into one company readiness score. Should sum to 1.0 (validator warns beyond +/-0.01).",
+      "properties": {
+        "dsa": {
+          "$ref": "#/$defs/weight"
+        },
+        "lld": {
+          "$ref": "#/$defs/weight"
+        },
+        "hld": {
+          "$ref": "#/$defs/weight"
+        },
+        "cs_fundamentals": {
+          "$ref": "#/$defs/weight"
+        },
+        "java_deep_dive": {
+          "$ref": "#/$defs/weight"
+        },
+        "behavioral": {
+          "$ref": "#/$defs/weight"
+        }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "difficulty_curve",
+        "rounds"
+      ],
+      "properties": {
+        "total_wall_clock_min": {
+          "type": "integer",
+          "minimum": 15,
+          "description": "Must equal the sum of all rounds' duration_min (including rounds disabled in v1). Validator enforces this."
+        },
+        "difficulty_curve": {
+          "enum": [
+            "flat",
+            "rising",
+            "front-loaded",
+            "spiky"
+          ],
+          "description": "rising = each round harder than the last; front-loaded = screen is the filter; spiky = one round far above the rest."
+        },
+        "rounds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ordinal",
+              "module",
+              "name",
+              "duration_min",
+              "difficulty_target"
+            ],
+            "properties": {
+              "ordinal": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "module": {
+                "enum": [
+                  "dsa",
+                  "lld",
+                  "hld",
+                  "cs_fundamentals",
+                  "java_deep_dive",
+                  "behavioral"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "stage": {
+                "enum": [
+                  "screen",
+                  "onsite",
+                  "take-home",
+                  "final"
+                ]
+              },
+              "duration_min": {
+                "type": "integer",
+                "minimum": 5
+              },
+              "difficulty_target": {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "medium-hard",
+                  "hard"
+                ]
+              },
+              "enabled_in_v1": {
+                "type": "boolean",
+                "default": true,
+                "description": "false => full-loop mode announces and skips this round (no interviewer module built for it in v1)."
+              },
+              "focus_tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "notes": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "quirks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "applies_to_rounds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Round ordinals. Omit to apply to every round."
+          },
+          "interviewer_behavior": {
+            "type": "string",
+            "description": "Injected verbatim into the interviewer system prompt for the matching rounds."
+          }
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bar_band"
+      ],
+      "properties": {
+        "bar_band": {
+          "enum": [
+            "lean-hire",
+            "hire",
+            "strong-hire"
+          ],
+          "description": "Minimum weighted band that counts as 'ready for this company'."
+        },
+        "module_minimums": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "description": "Per-module floor on the 1-5 rubric scale. A single module below its floor blocks 'ready' regardless of the weighted score."
+        },
+        "min_sessions_for_confidence": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3
+        }
+      }
+    }
+  },
+  "$defs": {
+    "weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

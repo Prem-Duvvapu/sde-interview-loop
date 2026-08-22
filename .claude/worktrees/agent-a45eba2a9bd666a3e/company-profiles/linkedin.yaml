@@ -1,0 +1,104 @@
+# LinkedIn — Software Engineer (SDE-2 equivalent), India (Bangalore)
+# CONFIDENCE: seeded-unverified.
+id: linkedin
+display_name: LinkedIn
+target_role:
+  title: Software Engineer
+  level_code: SWE (SDE-2 equivalent)
+  location_context: India (Bangalore)
+difficulty: medium-high
+
+calibration:
+  confidence: seeded-unverified
+  last_updated: "2026-08-22"
+  sources: []
+  notes: |
+    Seeded from the brief (DSA + HLD at scale).
+
+    LEVEL NOTE: the seed table listed LinkedIn as "Sr. SWE". That is one level above
+    SDE-2 and not the right target at ~2 years of experience, so this profile is
+    calibrated to the non-senior SWE loop: the HLD round is scoped to medium-hard rather
+    than hard, and the senior-only architecture deep dive is disabled. If you do get
+    routed to a senior loop, re-enable round 4 and raise the HLD target back to hard.
+
+emphasis:
+  dsa: 0.35
+  lld: 0.10
+  hld: 0.35
+  cs_fundamentals: 0.05
+  java_deep_dive: 0.05
+  behavioral: 0.10
+
+loop:
+  total_wall_clock_min: 285
+  difficulty_curve: rising
+  rounds:
+    - ordinal: 1
+      module: dsa
+      name: Phone screen — coding
+      stage: screen
+      duration_min: 60
+      difficulty_target: medium
+      focus_tags: [hashing, strings, trees, heaps]
+    - ordinal: 2
+      module: dsa
+      name: Onsite — coding
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [graphs, dp, design-of-data-structure]
+      notes: Often a "design and implement a data structure" flavour rather than a pure puzzle.
+    - ordinal: 3
+      module: hld
+      name: Onsite — system design at scale
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium-hard
+      focus_tags: [feed-systems, fanout, kafka, sharding, capacity-estimation]
+      notes: The round that carries the loop. Expect member-graph / feed / messaging framing.
+    - ordinal: 4
+      module: hld
+      name: Onsite — architecture & past-project deep dive
+      stage: onsite
+      duration_min: 60
+      difficulty_target: medium
+      enabled_in_v1: false
+      focus_tags: [trade-offs, failure-modes, ownership]
+      notes: >
+        Senior-loop round — drives from your own past systems rather than a fresh
+        prompt. Disabled at SDE-2 level; re-enable if your loop includes it.
+    - ordinal: 5
+      module: behavioral
+      name: Host / culture round
+      stage: final
+      duration_min: 45
+      difficulty_target: easy
+      enabled_in_v1: false
+
+quirks:
+  - id: scale-numbers-required
+    label: Real numbers, not hand-waving
+    description: >
+      LinkedIn design rounds push hard on capacity estimation — QPS, storage growth,
+      fanout ratios. "It scales horizontally" without arithmetic is a weak answer.
+    applies_to_rounds: [3, 4]
+    interviewer_behavior: |
+      Require explicit capacity estimation before accepting any architecture. Ask for
+      QPS at peak, storage per year, and the fanout ratio, and make the candidate carry
+      those numbers forward into their component sizing. If they wave at scale without
+      arithmetic, stop and ask for the numbers directly. Push specifically on the
+      read/write fanout trade-off — push-on-write vs pull-on-read is the canonical
+      LinkedIn discussion and they should be able to argue both sides.
+  - id: distributed-fundamentals
+    label: Expects real distributed-systems vocabulary
+    description: >
+      Consistency models, replication lag, idempotency, and backpressure come up by
+      name. Kafka-shaped thinking is common given LinkedIn's own stack.
+    applies_to_rounds: [3, 4]
+
+readiness:
+  bar_band: hire
+  module_minimums:
+    hld: 3.5
+    dsa: 3.5
+  min_sessions_for_confidence: 3
