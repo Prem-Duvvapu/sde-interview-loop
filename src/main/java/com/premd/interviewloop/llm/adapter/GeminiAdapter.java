@@ -7,8 +7,6 @@ import com.premd.interviewloop.llm.*;
 import com.premd.interviewloop.llm.Capabilities.PromptCachingMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
@@ -18,23 +16,18 @@ import java.util.*;
  * Gemini adapter — the default provider.
  * Uses Google's official Java SDK (com.google.genai:google-genai).
  *
- * Only registered as a Spring bean if GEMINI_API_KEY is present.
+ * Built per-request by {@link GeminiProviderFactory} from whatever key
+ * {@link com.premd.interviewloop.llm.ProviderKeyStore} currently resolves for "google" — never
+ * reads the environment itself, so it works the same whether the key came from env or the UI.
  */
-@Component
-@ConditionalOnProperty(name = "GEMINI_API_KEY")
 public class GeminiAdapter implements LlmProvider {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiAdapter.class);
 
     private final Client client;
 
-    public GeminiAdapter() {
-        String apiKey = System.getenv("GEMINI_API_KEY");
-        if (apiKey == null || apiKey.isBlank()) {
-            apiKey = System.getenv("GOOGLE_API_KEY");
-        }
+    public GeminiAdapter(String apiKey) {
         this.client = Client.builder().apiKey(apiKey).build();
-        log.info("Gemini adapter initialised");
     }
 
     @Override
