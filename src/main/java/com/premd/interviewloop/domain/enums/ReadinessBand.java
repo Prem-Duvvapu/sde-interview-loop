@@ -19,4 +19,14 @@ public enum ReadinessBand {
         if (score <= 4.2) return HIRE;
         return STRONG_HIRE;
     }
+
+    /** Lowercase-hyphenated form used everywhere else in the API and data files. */
+    public String wireValue() {
+        return switch (this) {
+            case NO_HIRE -> "no-hire";
+            case LEAN_HIRE -> "lean-hire";
+            case HIRE -> "hire";
+            case STRONG_HIRE -> "strong-hire";
+        };
+    }
 }

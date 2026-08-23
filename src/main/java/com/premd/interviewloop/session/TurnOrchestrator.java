@@ -7,6 +7,7 @@ import com.premd.interviewloop.domain.enums.RoundStatus;
 import com.premd.interviewloop.domain.enums.TurnRole;
 import com.premd.interviewloop.domain.repository.SessionRoundRepository;
 import com.premd.interviewloop.domain.repository.SignalRepository;
+import com.premd.interviewloop.evaluation.RoundEvaluator;
 import com.premd.interviewloop.interviewer.ControlCall;
 import com.premd.interviewloop.interviewer.InterviewerModule;
 import com.premd.interviewloop.interviewer.ModuleRegistry;
@@ -75,6 +76,7 @@ public class TurnOrchestrator {
      * than silently continuing to hand out hints.
      */
     private final Map<Long, Integer> hintLevels = new ConcurrentHashMap<>();
+    private final RoundEvaluator roundEvaluator;
 
     public TurnOrchestrator(SessionRoundRepository roundRepo,
                             SignalRepository signalRepo,
@@ -84,7 +86,8 @@ public class TurnOrchestrator {
                             ModuleRegistry moduleRegistry,
                             ProviderRegistry providerRegistry,
                             PromptAssembler promptAssembler,
-                            CostLedger costLedger) {
+                            CostLedger costLedger,
+                            RoundEvaluator roundEvaluator) {
         this.roundRepo = roundRepo;
         this.signalRepo = signalRepo;
         this.sessionManager = sessionManager;
@@ -94,6 +97,7 @@ public class TurnOrchestrator {
         this.providerRegistry = providerRegistry;
         this.promptAssembler = promptAssembler;
         this.costLedger = costLedger;
+        this.roundEvaluator = roundEvaluator;
     }
 
     /** Whether a round can actually be conducted, or is waiting on a module that is not built yet. */
@@ -294,6 +298,13 @@ public class TurnOrchestrator {
                     sessionManager.completeRound(roundId);
                     hintLevels.remove(roundId);
                     sink.roundCompleted(roundId);
+                    // Best-effort: the round is already COMPLETED regardless of whether this
+                    // succeeds, so a failure here must not surface as a refused control call.
+                    try {
+                        roundEvaluator.evaluate(roundId);
+                    } catch (Exception evalError) {
+                        log.warn("Round {}: evaluation failed — {}", roundId, evalError.getMessage());
+                    }
 
                 } else if (call instanceof ControlCall.Malformed m) {
                     log.warn("Round {}: ignoring malformed control call {} ({})",

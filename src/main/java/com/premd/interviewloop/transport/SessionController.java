@@ -4,7 +4,10 @@ import com.premd.interviewloop.domain.InterviewSession;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.SessionMode;
+import com.premd.interviewloop.evaluation.RoundEvaluator;
 import com.premd.interviewloop.session.SessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,10 +19,14 @@ import java.util.Map;
 @RequestMapping("/api/sessions")
 public class SessionController {
 
-    private final SessionManager sessionManager;
+    private static final Logger log = LoggerFactory.getLogger(SessionController.class);
 
-    public SessionController(SessionManager sessionManager) {
+    private final SessionManager sessionManager;
+    private final RoundEvaluator roundEvaluator;
+
+    public SessionController(SessionManager sessionManager, RoundEvaluator roundEvaluator) {
         this.sessionManager = sessionManager;
+        this.roundEvaluator = roundEvaluator;
     }
 
     @PostMapping
@@ -62,7 +69,15 @@ public class SessionController {
 
     @PostMapping("/{sessionId}/rounds/{roundId}/complete")
     public SessionRound completeRound(@PathVariable Long sessionId, @PathVariable Long roundId) {
-        return sessionManager.completeRound(roundId);
+        SessionRound round = sessionManager.completeRound(roundId);
+        // Evaluation is best-effort and must never undo a completion that already happened —
+        // the round stays COMPLETED even if the evaluator fails or times out.
+        try {
+            roundEvaluator.evaluate(roundId);
+        } catch (Exception e) {
+            log.warn("Evaluation failed for round {}: {}", roundId, e.getMessage());
+        }
+        return round;
     }
 
     @DeleteMapping("/{id}")
