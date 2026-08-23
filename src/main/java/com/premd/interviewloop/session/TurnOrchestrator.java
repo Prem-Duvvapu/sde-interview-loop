@@ -106,16 +106,35 @@ public class TurnOrchestrator {
     /**
      * Open a round: choose the question, pin the provider, and send the opening brief.
      * The brief is persisted as the round's first transcript turn so replay is complete.
+     *
+     * <p>Idempotent on {@code questionSlug}, not on round status. The web client starts a round
+     * over REST first (moving it PENDING → IN_PROGRESS) and then sends this over the socket
+     * purely to bind the connection and receive the opening brief — so by the time this runs,
+     * the round is routinely already IN_PROGRESS, and that is not a re-entrant call to reject.
+     * A question already being pinned is what actually means "this round has begun"; reject
+     * nothing but a truly repeated begin (a stale reconnect resending {@code start_round} after
+     * the question was already chosen), where the right behaviour is a silent no-op rather than
+     * re-picking a question or duplicating the opening transcript turn.
      */
     public void beginRound(Long roundId, TurnSink sink) {
         SessionRound pending = roundRepo.findById(roundId)
                 .orElseThrow(() -> new NoSuchElementException("Round not found: " + roundId));
 
-        // Check the module exists before marking the round started — otherwise a missing module
+        // Check the module exists before touching round state — otherwise a missing module
         // would leave a round stuck IN_PROGRESS with no way to conduct it.
         InterviewerModule module = moduleRegistry.require(pending.getModuleType());
 
-        sessionManager.startRound(roundId);
+        if (pending.getQuestionSlug() != null) {
+            sink.turnComplete(roundId);
+            return;
+        }
+
+        // Only run the PENDING -> IN_PROGRESS transition if REST /start hasn't already done it —
+        // the client is written to fall back to this socket call driving the round alone if that
+        // REST call failed, so it must still work when it hasn't run at all.
+        if (pending.getStatus() == RoundStatus.PENDING) {
+            sessionManager.startRound(roundId);
+        }
         hintLevels.remove(roundId);
 
         RoundContext ctx = contextFactory.build(roundId, 0);

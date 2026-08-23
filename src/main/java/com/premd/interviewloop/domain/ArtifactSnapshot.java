@@ -1,5 +1,6 @@
 package com.premd.interviewloop.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.premd.interviewloop.domain.enums.ArtifactKind;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -16,12 +17,17 @@ public class ArtifactSnapshot {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // LAZY back-references, never eagerly fetched by the queries that list artifacts for a
+    // round — the caller already has the round id from the URL. Same problem and fix as
+    // TranscriptTurn.round.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "round_id", nullable = false)
+    @JsonIgnore
     private SessionRound round;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "turn_id")
+    @JsonIgnore
     private TranscriptTurn turn;
 
     @Enumerated(EnumType.STRING)

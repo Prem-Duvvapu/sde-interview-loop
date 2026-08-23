@@ -1,5 +1,6 @@
 package com.premd.interviewloop.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -15,12 +16,17 @@ public class LlmCall {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // LAZY back-references, never eagerly fetched by whatever eventually lists llm_calls for a
+    // round — the caller already has the round id from the URL. Same problem and fix as
+    // TranscriptTurn.round.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "round_id")
+    @JsonIgnore
     private SessionRound round;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "turn_id")
+    @JsonIgnore
     private TranscriptTurn turn;
 
     @Column(nullable = false, length = 30)

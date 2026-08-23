@@ -1,5 +1,6 @@
 package com.premd.interviewloop.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 /**
@@ -14,8 +15,11 @@ public class RoundEvaluation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // LAZY, never eagerly fetched by whatever eventually lists evaluations for a round — the
+    // caller already has the round id from the URL. Same problem and fix as TranscriptTurn.round.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "round_id", nullable = false)
+    @JsonIgnore
     private SessionRound round;
 
     @Column(name = "rubric_version", length = 20)

@@ -1,5 +1,6 @@
 package com.premd.interviewloop.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.premd.interviewloop.domain.enums.TurnRole;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -15,8 +16,12 @@ public class TranscriptTurn {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // LAZY and never eagerly fetched by the queries that list turns for a round — the caller
+    // already has the round id from the URL, so this is never serialised (see SessionRound's
+    // matching @JsonBackReference on its own parent link, same problem, same fix).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "round_id", nullable = false)
+    @JsonIgnore
     private SessionRound round;
 
     @Column(nullable = false)

@@ -1,5 +1,6 @@
 package com.premd.interviewloop.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 /**
@@ -13,8 +14,11 @@ public class SessionReport {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // LAZY, never eagerly fetched by whatever eventually looks up a report for a session — the
+    // caller already has the session id from the URL. Same problem and fix as TranscriptTurn.round.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id", nullable = false)
+    @JsonIgnore
     private InterviewSession session;
 
     @Column(name = "overall_band", length = 20)
