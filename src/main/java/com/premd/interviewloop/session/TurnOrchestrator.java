@@ -240,6 +240,17 @@ public class TurnOrchestrator {
             return;
         }
 
+        // 3b. Standard function-calling protocol trains a model to pause after emitting a tool
+        // call and wait for a function *response* before continuing. This app's control tools
+        // never send one back — they're applied silently, server-side — so a model that decided
+        // to call one is doing exactly what it was trained to do by going silent afterward. No
+        // amount of prompt wording fixes that reliably; a candidate must never see literal
+        // silence, so retry once, tools withheld, asking specifically for the words that didn't
+        // arrive. Bounded to one retry and only fires on this genuinely degenerate case.
+        if (prose.isEmpty() && !controlCalls.isEmpty()) {
+            usage = appendSilentTurnContinuation(request, controlCalls, interviewer, prose, sink, usage);
+        }
+
         int latencyMs = (int) (System.currentTimeMillis() - startedAt);
 
         // 4. Persist the interviewer's turn.
@@ -330,5 +341,79 @@ public class TurnOrchestrator {
             messages.add(new LlmRequest.Message(role, turn.getContent(), false));
         }
         return messages;
+    }
+
+    /**
+     * One bounded retry for a turn that made tool calls but said nothing. Withholds tools
+     * entirely, so the model has nothing to do but produce the words it skipped — this cannot
+     * recurse into another silent turn. Streams straight into {@code prose} and {@code sink} on
+     * success; a failure here is logged and swallowed; the candidate keeps whatever silence there
+     * was rather than losing the tool calls that already succeeded.
+     *
+     * @return usage summed across both calls, so the ledger reflects the turn's true cost
+     */
+    private LlmEvent.Usage appendSilentTurnContinuation(LlmRequest original, List<ControlCall> calls,
+                                                         ProviderRegistry.Resolved interviewer,
+                                                         StringBuilder prose, TurnSink sink,
+                                                         LlmEvent.Usage firstUsage) {
+        List<LlmRequest.Message> messages = new ArrayList<>(original.getConversationMessages());
+        messages.add(new LlmRequest.Message("assistant", summarizeSilentCalls(calls), false));
+        messages.add(new LlmRequest.Message("user",
+                "(Nothing you said reached the candidate in your last turn — from their side, "
+                        + "you just went silent. Reply now, in a sentence or two, addressing "
+                        + "what they said or asked.)", false));
+
+        LlmRequest continuation = new LlmRequest()
+                .model(original.getModel())
+                .systemMessages(original.getSystemMessages())
+                .conversationMessages(messages)
+                .temperature(original.getTemperature())
+                .maxTokens(original.getMaxTokens())
+                .tools(List.of());
+
+        LlmEvent.Usage continuationUsage = null;
+        try {
+            for (LlmEvent event : interviewer.provider().stream(continuation)
+                    .timeout(TURN_TIMEOUT)
+                    .toIterable()) {
+                if (event.getType() == LlmEvent.Type.TEXT_DELTA) {
+                    prose.append(event.getTextDelta());
+                    sink.textDelta(event.getTextDelta());
+                } else if (event.getType() == LlmEvent.Type.USAGE) {
+                    continuationUsage = event.getUsage();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Silent-turn continuation failed, leaving the turn as-is: {}", e.getMessage());
+        }
+
+        if (continuationUsage == null) {
+            return firstUsage;
+        }
+        if (firstUsage == null) {
+            return continuationUsage;
+        }
+        return new LlmEvent.Usage(
+                firstUsage.inputTokens() + continuationUsage.inputTokens(),
+                firstUsage.outputTokens() + continuationUsage.outputTokens(),
+                firstUsage.cacheReadTokens() + continuationUsage.cacheReadTokens(),
+                firstUsage.cacheWriteTokens() + continuationUsage.cacheWriteTokens());
+    }
+
+    private String summarizeSilentCalls(List<ControlCall> calls) {
+        StringBuilder sb = new StringBuilder();
+        for (ControlCall call : calls) {
+            if (!sb.isEmpty()) sb.append(" ");
+            if (call instanceof ControlCall.RecordSignal s) {
+                sb.append("[Noted ").append(s.dimension()).append(".]");
+            } else if (call instanceof ControlCall.AdvancePhase a) {
+                sb.append("[Requested moving to ").append(a.targetPhase()).append(".]");
+            } else if (call instanceof ControlCall.SetHintLevel h) {
+                sb.append("[Raised hint level to ").append(h.level()).append(".]");
+            } else if (call instanceof ControlCall.EndRound e) {
+                sb.append("[Requested ending the round.]");
+            }
+        }
+        return sb.isEmpty() ? "[Sent no reply.]" : sb.toString();
     }
 }

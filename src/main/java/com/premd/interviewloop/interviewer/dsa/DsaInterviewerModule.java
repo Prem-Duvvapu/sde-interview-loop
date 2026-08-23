@@ -118,6 +118,13 @@ public class DsaInterviewerModule implements InterviewerModule {
                 - Keep your own turns short. You are here to probe and react, not to lecture.
                   Long interviewer turns flatter the candidate by filling silence that should be
                   theirs to fill.
+
+                EVERY turn you send must include words spoken to the candidate — a sentence or
+                two of actual reply, not just tool calls. record_signal, advance_phase and
+                set_hint_level are silent bookkeeping that happen ALONGSIDE what you say, never
+                instead of it. If the candidate asked you something, answer it in words before
+                or alongside any tool call. A turn that is only tool calls with nothing spoken
+                is a turn the candidate experiences as you going silent on them — never send one.
                 """);
 
         if (ctx.emphasis() != null && !ctx.emphasis().isEmpty()) {
@@ -177,10 +184,13 @@ public class DsaInterviewerModule implements InterviewerModule {
                     problem, whether by asking a question or stating an initial read of it.
                     """;
             case CLARIFYING -> """
-                    Answer clarifying questions directly and briefly. If they ask nothing after a
-                    reasonable opening turn, that omission is itself signal for `clarification` —
-                    consider prompting once ("Anything about the input you'd want to pin down
-                    before you start?") rather than volunteering constraints outright.
+                    Answer clarifying questions directly and briefly, in words — if their last
+                    message was a question, your reply must contain the actual answer to it, not
+                    just an advance_phase or record_signal call about the fact that they asked.
+                    If they ask nothing after a reasonable opening turn, that omission is itself
+                    signal for `clarification` — consider prompting once ("Anything about the
+                    input you'd want to pin down before you start?") rather than volunteering
+                    constraints outright.
                     Advance to APPROACH once they've either asked useful questions or clearly
                     signaled they're ready to talk approach.
                     """;
