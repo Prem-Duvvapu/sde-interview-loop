@@ -1,0 +1,54 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: lru-cache-with-ttl
+title: In-Memory Cache with TTL and Eviction
+difficulty: medium
+tags:
+  - concurrency
+  - data-structures
+  - extensibility
+
+statement: >
+  Design an in-memory key-value cache for a single service instance, with two eviction
+  pressures active at once: a fixed capacity (evict least-recently-used when full) and a
+  per-entry time-to-live (an entry is invalid once its TTL expires, regardless of how
+  recently it was used).
+
+  Requirements:
+  - `void put(String key, V value, Duration ttl)`
+  - `Optional<V> get(String key)` — must not return an expired entry, even if it hasn't
+    been physically evicted yet.
+  - When at capacity, inserting a new key evicts the least-recently-used non-expired
+    entry.
+  - Safe under concurrent access from multiple threads.
+
+constraints:
+  - Single JVM, in-memory only.
+  - Expired entries should not leak memory indefinitely even if nobody calls get() on
+    them again — but a full background sweep thread is a design choice to discuss, not
+    a requirement to assume.
+
+example: >
+  put("a", 1, 10s); put("b", 2, 1ms). After 5ms, get("b") returns empty (expired) even
+  though it was never evicted by capacity pressure. get("a") still returns 1.
+
+interviewer_notes: >
+  Expected shape: a doubly-linked list + hash map for O(1) LRU (or Java's
+  LinkedHashMap with accessOrder=true and a removeEldestEntry override, which is a
+  legitimate answer worth crediting — don't penalize using a language feature that does
+  the job). TTL is the actual design tension here: is it stored as an absolute expiry
+  timestamp per entry (simple, checked lazily on get) or does it require a separate
+  timer/priority-queue structure for proactive expiry? Lazy checking on get() is a fine
+  starting answer; push on "what if a key is expired and nobody ever reads it again — does
+  it sit in memory forever?" to probe whether they reach for a background sweep or a
+  min-heap of expiry times as a follow-up.
+
+  Concurrency: the LRU ordering update on get() is itself a *write* (moves the accessed
+  node to the front), which most candidates miss is a mutation hiding inside a
+  read-shaped method name — this is the single best correctness probe for this question.
+  A `synchronized` wrapper around the whole cache is a correct if coarse-grained answer;
+  worth asking what a finer-grained approach would look like as a stretch, but do not
+  penalize coarse locking as wrong.
+
+  SOLID/extensibility probe: is eviction policy (LRU here) hardcoded into the cache class,
+  or is there a seam for LFU or FIFO later? Not required to build, but they should be able
+  to sketch where that seam would go.

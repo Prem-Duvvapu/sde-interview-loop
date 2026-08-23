@@ -1,0 +1,53 @@
+# Original prompt, written for this project. "Design a rate limiter" is a generic, widely
+# used LLD exercise pattern, not proprietary text — but the requirements, constraints and
+# interviewer notes below are original to this project (see D-5 in PROJECT_PLAN.md).
+slug: rate-limiter
+title: API Rate Limiter
+difficulty: medium
+tags:
+  - concurrency
+  - strategy-pattern
+  - extensibility
+
+statement: >
+  Design an in-process rate limiter for a single API gateway instance (no distributed
+  coordination — that's a different, harder problem, and explicitly out of scope here
+  unless the candidate wants to discuss it as a stretch extension).
+
+  Requirements:
+  - `boolean allow(String clientId)` — returns whether the current request from this
+    client should be permitted, given some limit like "100 requests per minute per client".
+  - The limiting algorithm should be swappable (token bucket today, sliding window or
+    leaky bucket later) without changing the calling code.
+  - Correct under concurrent calls from multiple threads for the same client.
+  - Memory should not grow unboundedly as new client IDs appear over the app's lifetime.
+
+constraints:
+  - Single JVM, in-memory only — no Redis, no external store.
+  - Design the classes and key method signatures; a full concurrent implementation of
+    the chosen algorithm is a stretch goal, not a requirement, if time is short.
+
+example: >
+  allow("client-A") called 100 times within one minute all return true; the 101st call
+  within that same rolling minute returns false. A different client, "client-B", is
+  unaffected by client-A's usage.
+
+interviewer_notes: >
+  Expected shape: a `RateLimiter` interface (or abstract class) with `allow(clientId)`,
+  and one or more strategy implementations (`TokenBucketRateLimiter`,
+  `SlidingWindowRateLimiter`) — this is the SOLID/extensibility probe: can they name the
+  Strategy pattern or arrive at its shape without naming it? A single hardcoded
+  if/else-based class with no seam for a second algorithm is a real gap, not a style
+  preference — call it out directly in DEEP_DIVE if that's what they produce.
+
+  Concurrency: per-client state (bucket or window) needs its own lock or an atomic
+  structure — a single global lock serializing all clients is a correctness-preserving
+  but scalability-destroying answer worth pushing on ("what happens to client-B while
+  client-A is being rate-limited?"). A `ConcurrentHashMap<String, ClientState>` with
+  either `computeIfAbsent` or per-entry synchronization is the class of answer to listen
+  for; a plain `HashMap` behind no synchronization at all is a correctness bug, not just
+  a style gap — flag it as such.
+
+  Memory: without eviction, `clientId -> state` grows forever. A candidate who doesn't
+  address this unprompted is a real gap for EXTENSION — ask directly ("what happens after
+  a year of new client IDs showing up once and never again?").

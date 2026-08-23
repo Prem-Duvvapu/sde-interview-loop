@@ -1,0 +1,51 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: parking-garage
+title: Multi-Level Parking Garage
+difficulty: medium
+tags:
+  - object-modeling
+  - solid
+  - strategy-pattern
+
+statement: >
+  Design the core classes for a multi-level parking garage. Vehicles come in different
+  sizes (motorcycle, car, bus) and take up different numbers of adjacent spots; spots
+  come in different sizes too (a motorcycle can park in any spot, a car needs a
+  regular-or-larger spot, a bus needs multiple adjacent large spots).
+
+  Requirements:
+  - `Ticket parkVehicle(Vehicle vehicle)` — finds a suitable spot (or spots, for a bus)
+    across any level and assigns it, or fails clearly if the garage is full for that
+    vehicle type.
+  - `Receipt unparkVehicle(Ticket ticket)` — frees the spot(s) and computes a fee.
+  - Pricing differs by vehicle type and, separately, the garage wants to be able to run a
+    promotional pricing scheme (e.g. flat weekend rate) without touching the core
+    parking logic.
+
+constraints:
+  - Single garage, single process — no distributed concerns.
+  - Assume spot-finding doesn't need to be maximally fuel-efficient for the driver; any
+    correct free spot is fine.
+
+example: >
+  A Bus requiring 2 adjacent large spots on the same level parks only if the garage finds
+  two such adjacent free spots; if only two large spots exist but on different levels or
+  non-adjacent, parkVehicle fails for that bus even though "enough capacity" exists.
+
+interviewer_notes: >
+  Expected shape: a `Vehicle` hierarchy (or a `VehicleType` enum with size — either is
+  defensible, worth asking which and why), a `ParkingSpot` with a size/type, `Level`
+  holding spots, and a `Garage` coordinating levels. The bus-needs-adjacent-spots
+  requirement is the actual design pressure here — a naive "count free spots of the right
+  size" answer misses adjacency entirely; that's a correctness gap for CLASS_MODEL, not a
+  nitpick, since it means the design can't actually satisfy the stated requirement.
+
+  SOLID probe: pricing swappability is a near-verbatim Strategy pattern prompt — a
+  `PricingStrategy` interface with a `computeFee(Vehicle, Duration)` method, injected into
+  whatever computes the receipt, rather than a hardcoded price table inside the garage
+  class. If they hardcode pricing into `Garage` or `Vehicle`, that's the EXTENSION-phase
+  probe: "the business wants a weekend flat rate next month — what changes?"
+
+  A candidate reaching for inheritance (`Car extends Vehicle`) vs. composition (a
+  `Vehicle` class holding a `VehicleType` enum) are both legitimate — ask which they chose
+  and why rather than presuming one is correct.

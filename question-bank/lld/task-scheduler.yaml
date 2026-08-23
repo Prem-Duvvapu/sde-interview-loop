@@ -1,0 +1,53 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: task-scheduler
+title: In-Process Priority Task Scheduler with Retries
+difficulty: medium-hard
+tags:
+  - concurrency
+  - solid
+  - object-modeling
+
+statement: >
+  Design an in-process task scheduler for a backend service: callers submit units of
+  work with a priority, the scheduler runs them on a bounded pool of worker threads, and
+  a failed task is retried with backoff up to a configurable max attempts before being
+  given up on.
+
+  Requirements:
+  - `void submit(Task task, Priority priority)` — higher priority tasks should generally
+    run before lower priority ones, though a already-running task is never preempted.
+  - Configurable pool size; tasks queue if all workers are busy.
+  - On failure (the task throws), retry with exponential backoff, up to N attempts
+    (configurable), then move it to a "dead" state the caller can inspect.
+  - A caller can ask whether a submitted task is pending, running, succeeded, retrying,
+    or dead.
+
+constraints:
+  - Single JVM, in-memory only — no persistence across restarts.
+  - Tasks are arbitrary `Runnable`-shaped units of work; assume they're idempotent (retry
+    safety of the task's own logic is not this design's problem).
+
+example: >
+  Two tasks submitted, one HIGH and one LOW priority, pool size 1. The HIGH priority task
+  runs first even though it was submitted second, as long as the worker was free when it
+  arrived (a LOW task already running is not interrupted).
+
+interviewer_notes: >
+  Expected shape: a `Task` wrapper carrying state (PENDING/RUNNING/SUCCEEDED/RETRYING/DEAD)
+  and attempt count, a priority queue (or multiple queues, one per priority level) feeding
+  a fixed worker pool — `java.util.concurrent.PriorityBlockingQueue` plus a
+  `ThreadPoolExecutor`, or a hand-rolled equivalent, are both fine answers; the interesting
+  part is retry/backoff, which standard `ExecutorService` doesn't give you for free, so
+  they need to design where that logic lives (a wrapper around task execution that
+  re-submits on failure with a scheduled delay, likely via
+  `ScheduledExecutorService` for the backoff delay itself).
+
+  SOLID probe: is retry policy (max attempts, backoff shape) hardcoded, or a pluggable
+  `RetryPolicy` a caller can supply per task type? Push on this in EXTENSION if it's
+  hardcoded: "one caller wants linear backoff instead of exponential — what changes?"
+
+  Concurrency correctness is the real bar here: state transitions (PENDING → RUNNING →
+  RETRYING → ... → DEAD/SUCCEEDED) need to be free of races if the same task's status can
+  be queried from another thread while it's executing. A candidate who doesn't mention
+  how state reads stay consistent under concurrent execution has a real gap — ask
+  directly, don't let it pass silently.

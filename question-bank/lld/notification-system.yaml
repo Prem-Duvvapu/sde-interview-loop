@@ -1,0 +1,57 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: notification-system
+title: Multi-Channel Notification System
+difficulty: hard
+tags:
+  - observer-pattern
+  - solid
+  - extensibility
+  - concurrency
+
+statement: >
+  Design a notification system for a backend service: application code raises events
+  ("order shipped", "password reset requested"), and subscribers receive them through
+  whichever channels they've opted into (email, SMS, push) — without the event-raising
+  code knowing which channels exist or how many subscribers there are.
+
+  Requirements:
+  - `void publish(Event event)` — application code calls this; it should not need to know
+    about channels or subscribers at all.
+  - Users can subscribe to specific event types on specific channels
+    (e.g. "email me on order-shipped, push-notify me on password-reset").
+  - Adding a brand-new channel (say, Slack) later must not require changing `publish()`
+    or any existing channel's code.
+  - One channel's delivery failure (e.g. the email provider is down) must not block or
+    fail delivery on other channels for the same event.
+
+constraints:
+  - Assume each channel has some existing `send(Address, String message)`-shaped client
+    already provided — you're designing the system around them, not the clients
+    themselves.
+  - Delivery can be fire-and-forget for this design; guaranteed-delivery/retry queues are
+    a discussable extension, not a requirement.
+
+example: >
+  publish(OrderShipped) fires; every subscriber who opted into OrderShipped on email gets
+  an email, every one who opted in on SMS gets an SMS — via the same publish() call, with
+  no branching in application code based on channel.
+
+interviewer_notes: >
+  This is a close-to-canonical Observer pattern prompt, deliberately — the interesting
+  work is in how cleanly they arrive at it and where they place the seams. Expected shape:
+  an `EventBus`/`Publisher` that `publish()` calls, a `Subscriber` (or `NotificationChannel`)
+  interface each channel implements, and a registry mapping (event type, channel) pairs
+  to subscribers. The isolation requirement (one channel's failure doesn't block another)
+  means each channel's send must be independently fault-isolated — a single try/catch per
+  channel dispatch at minimum; whether they reach for per-channel async dispatch
+  (a thread pool, or one thread per channel) to also get *concurrent* delivery instead of
+  just *isolated* delivery is the DEEP_DIVE-worthy distinction to probe for.
+
+  SOLID probe: does adding Slack require touching `publish()`, the `EventBus`, or any
+  existing channel class? If yes, that's a real open/closed violation — name it directly
+  in EXTENSION.
+
+  Common shallow answer: hardcoding a fixed set of channel enums with an if/else dispatch
+  inside `publish()` itself. That satisfies the demo but fails the actual extensibility
+  requirement — treat it as a correctness gap against the stated requirement, not a style
+  preference, since "add Slack without touching publish()" was explicitly asked for.
