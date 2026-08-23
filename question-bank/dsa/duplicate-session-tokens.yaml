@@ -1,0 +1,43 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: duplicate-session-tokens
+title: Duplicate Session Tokens
+difficulty: easy
+tags:
+  - hashing
+  - sliding-window
+  - arrays
+
+statement: >
+  An auth service logs every session token it issues, in order, into a single array.
+  Because of a bug further upstream, the same token can occasionally be issued twice.
+  A repeat is only a problem if it happens within a suspiciously short window — if the
+  same token shows up twice more than `k` log entries apart, that's unrelated reuse and
+  fine to ignore.
+
+  Write a function that takes the array of tokens and an integer `k`, and returns
+  whether any token appears twice within a window of `k` (that is, two equal tokens
+  whose array-index distance is less than or equal to `k`).
+
+constraints:
+  - "1 <= tokens.length <= 10^5"
+  - "0 <= k <= tokens.length"
+  - "tokens[i] is a non-empty string, length <= 64"
+
+example: |
+  tokens = ["a1", "b2", "c3", "a1", "d4"], k = 3
+  → true   (indices 0 and 3 are both "a1", distance 3 <= k)
+
+  tokens = ["a1", "b2", "c3", "a1", "d4"], k = 2
+  → false  (same pair, distance 3 > k)
+
+interviewer_notes: >
+  Intended solution: a hash map from token to its most recent index, single pass,
+  O(n) time / O(n) space. The candidate should reach for a brute-force O(n·k) pairwise
+  check first, or in the worst case O(n^2) — that's a fine opening position for
+  CLARIFYING/APPROACH, but by COMPLEXITY they should be pushed toward the hash-map
+  version and asked to justify why it's correct (why last-seen-index is sufficient,
+  not just presence). A sliding-window-of-a-set variant (maintain a window set of size
+  k, evict on slide) is an equally valid O(n) answer and should score the same.
+  Common pitfall: off-by-one on "distance <= k" vs "< k" — worth a clarifying question
+  in its own right, and a candidate who never asks it is a real signal, not a nitpick.

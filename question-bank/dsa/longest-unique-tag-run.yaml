@@ -1,0 +1,40 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: longest-unique-tag-run
+title: Longest Unique Deploy-Tag Run
+difficulty: medium
+tags:
+  - sliding-window
+  - hashing
+  - strings
+
+statement: >
+  A CI system emits one deploy tag per build, as a contiguous stream (a string, one
+  character per tag for simplicity — treat it as a sequence of tokens). Management
+  wants to know the longest contiguous run of builds during which no deploy tag
+  repeated, since a repeat inside a run usually means a rollback-and-redeploy loop
+  was happening.
+
+  Given the stream as a string `s`, return the length of the longest substring of
+  `s` with no repeated character.
+
+constraints:
+  - "0 <= s.length <= 5 * 10^4"
+  - "s consists of printable ASCII characters"
+
+example: |
+  s = "abcabcbb" → 3   (the run "abc")
+  s = "bbbbb"    → 1
+  s = "pwwkew"   → 3   (the run "wke")
+
+interviewer_notes: >
+  Intended solution: sliding window with a hash map from character to its last-seen
+  index, expanding the right edge and jumping the left edge forward past any repeat —
+  O(n) time, O(min(n, alphabet size)) space. A brute-force check-every-substring
+  approach is O(n^3) or O(n^2) with a running set, and is an acceptable APPROACH-phase
+  answer to build up from.
+  The candidate should articulate *why* the left pointer only ever moves forward
+  (never resets to the start) — that's the actual insight, not just "use a window."
+  A common bug: moving the left pointer to `lastSeen[c]` instead of `lastSeen[c] + 1`,
+  or moving it even when `lastSeen[c]` is outside the current window (stale index).
+  Both are worth a targeted edge-case probe rather than a broad hint.

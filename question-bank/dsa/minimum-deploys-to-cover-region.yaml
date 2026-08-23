@@ -1,0 +1,46 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: minimum-deploys-to-cover-region
+title: Minimum Deploys to Cover a Region
+difficulty: hard
+tags:
+  - greedy
+  - dynamic-programming
+  - intervals
+
+statement: >
+  A CDN rollout needs to cover every point of the integer range `[0, target]`.
+  You're given a list of candidate deploy jobs; job `i` covers the contiguous range
+  `[start_i, end_i]`. You may pick any subset of jobs (each used at most once,
+  overlaps between chosen jobs are fine and expected). Return the minimum number of
+  jobs needed so the union of their ranges covers all of `[0, target]`, or -1 if it's
+  impossible with the given jobs.
+
+constraints:
+  - "1 <= target <= 10^5"
+  - "1 <= jobs.length <= 10^4"
+  - "0 <= start_i < end_i <= target"
+
+example: |
+  target = 10
+  jobs = [[0,3], [2,6], [5,9], [8,10], [1,2]]
+  → 4   ([0,3] + [2,6] + [5,9] + [8,10] covers [0,10] with no gap; any 3-job subset
+         of these leaves a gap — e.g. [0,3]+[2,6]+[8,10] misses (6,8))
+
+  target = 5
+  jobs = [[0,2]]
+  → -1  (can never reach past 2)
+
+interviewer_notes: >
+  Intended solution: greedy interval-cover. Sort jobs by start. Walk forward
+  maintaining `covered` (rightmost point reached) and, among all jobs starting at or
+  before `covered`, greedily pick the one reaching furthest — classic "jump game"
+  style greedy, O(n log n). A DP formulation (dp[i] = min jobs to cover [0,i]) is
+  O(n · target) or better with the right state and is a legitimate alternative to
+  accept, but should be pushed toward the greedy proof in COMPLEXITY: ask the
+  candidate to argue why picking the furthest-reaching job among eligible ones is
+  never wrong (an exchange argument), not just that it happens to work on the example.
+  Note the worked example above is intentionally a bit fiddly — use it to check the
+  candidate actually traces through cases instead of pattern-matching a memorized
+  greedy template. The -1 case (target unreachable) is an edge case worth confirming
+  they handle, not just the happy path.

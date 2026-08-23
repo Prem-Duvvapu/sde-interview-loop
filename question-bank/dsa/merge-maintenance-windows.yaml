@@ -1,0 +1,40 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: merge-maintenance-windows
+title: Merge Maintenance Windows
+difficulty: medium
+tags:
+  - intervals
+  - sorting
+  - greedy
+
+statement: >
+  A fleet of services each publish a planned maintenance window as `[start, end]`,
+  in minutes since midnight. Two windows that touch or overlap mean both services
+  are down for some shared period, which the on-call team wants collapsed into a
+  single combined outage window for the status page.
+
+  Given a list of windows, return the smallest set of windows that covers exactly
+  the same downtime, with no two returned windows overlapping or touching.
+
+constraints:
+  - "1 <= windows.length <= 10^4"
+  - "0 <= start <= end <= 1440"
+  - "Windows are not given in any particular order."
+
+example: |
+  windows = [[30, 75], [0, 20], [70, 100], [200, 210]]
+  → [[0, 20], [30, 100], [200, 210]]
+
+  ([30,75] and [70,100] touch at 70-75, so they merge into [30,100].
+   [0,20] doesn't touch [30,75] since 20 < 30, so it stays separate.)
+
+interviewer_notes: >
+  Intended solution: sort by start time, then a single linear sweep merging into the
+  last output window when the next window's start is <= the current merged end.
+  O(n log n) from the sort, O(n) for the sweep. The interesting judgment call is the
+  boundary condition — "touch or overlap" means merge on `next.start <= current.end`,
+  not strictly `<`; a candidate who codes `<` will fail on windows like [30,75] and
+  [75,100] and this is a good edge case to probe for directly if they don't raise it.
+  A correct but unsorted-first approach (repeatedly rescanning to merge) is O(n^2) and
+  a fine starting point, but should be pushed on during COMPLEXITY.
