@@ -186,12 +186,12 @@ public class SessionManager {
     }
 
     public InterviewSession getSession(Long sessionId) {
-        return sessionRepo.findById(sessionId)
+        return sessionRepo.findByIdWithRounds(sessionId)
                 .orElseThrow(() -> new NoSuchElementException("Session not found: " + sessionId));
     }
 
     public List<InterviewSession> listSessions() {
-        return sessionRepo.findAllByOrderByStartedAtDesc();
+        return sessionRepo.findAllWithRoundsByOrderByStartedAtDesc();
     }
 
     private void checkSessionCompletion(Long sessionId) {
