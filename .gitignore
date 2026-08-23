@@ -24,6 +24,10 @@ data/
 *.iml
 .vscode/
 
+# Per-agent git worktrees (Phase 2-5 parallel work) — each is its own checkout on its
+# own branch; committing one into main duplicates the whole tree (see git history).
+.claude/worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
