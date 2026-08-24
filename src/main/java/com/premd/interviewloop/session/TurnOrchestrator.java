@@ -211,6 +211,7 @@ public class TurnOrchestrator {
                 toMessages(transcriptService.getTranscript(roundId)),
                 module.phaseDirective(ctx),
                 artifact,
+                module.artifactLabel(),
                 module.maxResponseTokens());
 
         // 3. Stream, outside any transaction.

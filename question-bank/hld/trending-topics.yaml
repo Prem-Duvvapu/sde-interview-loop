@@ -1,0 +1,67 @@
+# Original prompt, written for this project. Trending-topic computation is a generic,
+# widely used system-design exercise pattern, not proprietary text — but the numbers,
+# requirements, constraints and interviewer notes below are original to this project
+# (see D-5 in PROJECT_PLAN.md).
+slug: trending-topics
+title: Trending Search Topics
+difficulty: medium
+tags:
+  - top-k
+  - aggregation
+  - estimation
+  - streaming
+
+statement: >
+  Design the "Trending now" feature for a search engine's homepage: the top 10 topics
+  people are searching for right now, refreshed every minute.
+
+  Functional requirements:
+  - Search events arrive as (topic, timestamp). A topic is a normalized string
+    ("ipl final", "election results").
+  - Every minute, publish the 10 topics with the highest count over roughly "the recent
+    past" — you choose and justify the window (last 15 minutes, last hour, …).
+  - The published list is read by every visit to the homepage.
+  - A topic that was trending an hour ago must decay off the list rather than stick by
+    sheer accumulated history.
+
+  Scale to design for:
+  - 50,000 searches per second at peak.
+  - Around 5 million distinct topics per day; only a few hundred thousand are "active"
+    in any given hour.
+
+constraints:
+  - "Exactness is negotiable if you can argue the cost: say clearly whether your design gives exact top-10 or approximate, and why that's acceptable or not here."
+  - The homepage read path should not touch anything expensive per request.
+
+example: >
+  At 12:00:00 the endpoint returns ["ipl final", "monsoon alert", …] with counts
+  computed from the chosen window. By 12:04, after a celebrity news event, that topic
+  has entered the list while a two-hour-old topic has fallen off despite its large
+  total count.
+
+interviewer_notes: >
+  The core tension to listen for: exact counting at 50k events/sec means either a very
+  hot counter key per topic (contention) or sharded counters with periodic merge;
+  approximate structures (count-min sketch + bounded heaps) are cheaper but can't give
+  reliable *ranks*, only "probably top". An SDE-2 answer may reasonably pick either —
+  what separates at-bar from above-bar is that they name the choice consciously and
+  note that trending lists tolerate approximation well because rank 7 vs rank 8 doesn't
+  matter to users. Candidates who silently assume exactness without costing it are
+  missing the trade-off dimension entirely.
+
+  Windowing: a single global window needs decay or sliding segments — expected shape is
+  fixed buckets (e.g. per-minute counts) summed over the window, which also makes the
+  refresh-a-minute job trivially parallel. Watch for candidates whose "recent past"
+  design accidentally makes old viral topics immortal (no decay) or lets one hot topic's
+  counter become an uncontended-but-unbounded memory leak (no eviction of inactive
+  topics).
+
+  Read path: the published list is precomputed once a minute into a cache/document —
+  homepage requests must never compute anything. If their homepage path hits the raw
+  counters, that's a real bottleneck-identification gap worth probing directly:
+  "walk me through what happens on one homepage load."
+
+  Estimation anchors: 50k/sec ≈ 3M events/min ≈ 180M/hour; a few hundred thousand active
+  topics × small counter state fits in a handful of gigabytes of RAM across shards.
+  Storage of raw events forever is unnecessary — aggregate then drop, or keep a day for
+  replay/debugging.

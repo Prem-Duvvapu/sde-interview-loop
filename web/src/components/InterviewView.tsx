@@ -8,6 +8,7 @@ import { useTicker } from '../lib/hooks';
 import { PhaseStrip } from './PhaseStrip';
 import { TranscriptPane } from './TranscriptPane';
 import { EditorPane } from './EditorPane';
+import { DiagramPane } from './DiagramPane';
 import { Composer } from './Composer';
 import { StatusBar } from './StatusBar';
 
@@ -134,14 +135,24 @@ export function InterviewView(props: Props) {
           />
         </div>
 
-        <EditorPane
-          language={language}
-          onLanguageChange={onLanguageChange}
-          onBufferChange={onBufferChange}
-          title={artifactLabelFor(moduleType)}
-          readOnly={roundComplete}
-          resetToken={resetToken}
-        />
+        {/* DM-2: HLD works on a structured component graph, not a code buffer. */}
+        {moduleType === 'hld' ? (
+          <DiagramPane
+            title={artifactLabelFor(moduleType)}
+            onBufferChange={onBufferChange}
+            readOnly={roundComplete}
+            resetToken={resetToken}
+          />
+        ) : (
+          <EditorPane
+            language={language}
+            onLanguageChange={onLanguageChange}
+            onBufferChange={onBufferChange}
+            title={artifactLabelFor(moduleType)}
+            readOnly={roundComplete}
+            resetToken={resetToken}
+          />
+        )}
       </div>
 
       <StatusBar

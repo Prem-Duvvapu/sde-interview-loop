@@ -1,0 +1,61 @@
+# Original prompt, written for this project. Group messaging is a generic system-design
+# exercise pattern; the numbers, requirements and notes below are original to this
+# project (see D-5 in PROJECT_PLAN.md).
+slug: group-chat
+title: Group Chat Backend
+difficulty: medium
+tags:
+  - realtime
+  - websocket
+  - fan-out
+  - presence
+
+statement: >
+  Design the backend for a WhatsApp-style group chat (mobile clients), for groups of
+  up to 1,000 members.
+
+  Functional requirements:
+  - Members send messages to the group; every online member receives them within ~2 s.
+  - A member opening the app after being offline receives everything they missed,
+    in order, per group.
+  - Members see who is currently online in each group (presence is best-effort).
+  - One-to-one chats are out of scope; groups only.
+
+  Scale to design for:
+  - 2 million concurrent connections per region.
+  - 50k group messages delivered per second at peak.
+  - Median message is small (< 1 KB); a few photos, so allow for occasional 5 MB
+    attachments via object storage links.
+
+constraints:
+  - "Sketch the delivery path first: sender → your backend → recipients' devices. The interesting decisions live there, not in CRUD endpoints."
+  - You may assume an existing connection gateway concept (things that hold millions of
+    TCP/WebSocket sockets) exists or can be bought; say how YOUR service uses it.
+
+example: >
+  Alice sends "standup moved to 10" to a 40-person team group. The 30 members online
+  get it within about a second; the rest find it waiting when they next open the app,
+  positioned correctly relative to earlier messages.
+
+interviewer_notes: >
+  Expected shape: connection gateways holding persistent sockets → a lightweight chat /
+  routing service → message store with per-member cursor ("last read/received message id").
+  Delivery = push over the socket when online + inbox-backed sync when offline; ordering
+  is per-group via server-assigned sequence numbers (not client timestamps). Estimation
+  anchors: 2M concurrent sockets × ~50 KB overhead ≈ manageable RAM but NOT on one box —
+  gateways must shard by user; 50k msg/s fan-out to 1000-member groups would be 50M
+  deliveries/s if every group were max size — probe what average group size they assume;
+  the honest answer is that huge-broadcast groups need different treatment (lazy pull)
+  than small ones (eager push).
+
+  Probes that earn their keep here: (1) where do unread messages WAIT for offline users
+  — a queue is not an answer until it says who reads it and when it's safe to delete;
+  per-user inbox rows or cursors over a per-group log both work, make them pick one;
+  (2) presence at scale is heartbeat-driven with TTLs — anyone storing presence in a
+  relational DB row-per-user should be asked what QPS that implies (it's enormous);
+  (3) exactly-once is not achievable end-to-end cheaply — at-least-once plus client-side
+  dedup by message id is the standard SDE-2-correct position.
+
+  Failure modes to watch: designing only the happy path (no reconnect story); assuming
+  the DB notifies subscribers; putting attachments through the message store instead of
+  object storage + link.

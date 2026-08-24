@@ -1,0 +1,65 @@
+# Original prompt, written for this project. "Design a URL shortener" is a generic,
+# widely used system-design exercise pattern, not proprietary text — but the numbers,
+# requirements, constraints and interviewer notes below are original to this project
+# (see D-5 in PROJECT_PLAN.md).
+slug: url-shortener
+title: URL Shortener
+difficulty: medium
+tags:
+  - read-heavy
+  - capacity-estimation
+  - caching
+  - key-generation
+
+statement: >
+  Design the backend for a link-shortening service like bit.ly.
+
+  Functional requirements:
+  - `shorten(longUrl)` returns a short link such as `sho.rt/aB3xK9` that redirects to
+    the original URL.
+  - Visiting a short link redirects the browser to the long URL (301 or 302 — your call).
+  - Links never expire in v1.
+  - Optional if time permits: per-link click counts, readable by an analytics endpoint.
+
+  Scale to design for:
+  - 100 million new links created per month.
+  - Roughly 100 reads (redirects) for every write.
+  - The service must respond to a redirect in under 50 ms at p95, from anywhere the
+    service is deployed.
+
+constraints:
+  - Sketch the API surface briefly, then spend your time on storage, ID generation and
+    the read path — not on the UI.
+  - You may assume a managed relational database and a managed cache are available; the
+    interesting decisions are how you use them, not which vendor.
+
+example: >
+  shorten("https://example.com/some/very/long/path?q=1") => "sho.rt/aB3xK9".
+  A GET of "sho.rt/aB3xK9" later returns a redirect to the original URL. Re-shortening
+  the same long URL may return either the same or a different short link — say which
+  you chose and why.
+
+interviewer_notes: >
+  Estimation anchors the candidate should reach unprompted or with one nudge: 100M
+  writes/month is ~40 writes/sec average (~400 at peak); with a 100:1 read ratio that's
+  ~4k reads/sec average, tens of thousands at peak. Storage: 100M rows/month × ~500
+  bytes ≈ 50 GB/month — a single well-indexed relational node holds years of this before
+  sharding is even worth discussing; a candidate who jumps straight to "we need to shard
+  across 16 nodes" is pattern-matching, not estimating. Keys: base62 over a counter is
+  the expected answer (6 chars ≈ 56 billion combinations, comfortably above the yearly
+  volume); random-token approaches need a collision/retry discussion; MD5-of-URL
+  truncation has a birthday-collision problem candidates should at least taste.
+
+  Expected shape: app tier → cache → single primary DB (writes) with read replicas or
+  just a cache absorbing reads. The genuinely important probes: (1) redirect latency is
+  dominated by cache hit rate — ask what the hit rate needs to be and what eviction
+  means when a popular link falls out (it's fine — it's a DB read, not an outage);
+  (2) 301 vs 302 — 301 lets browsers drop analytics forever, 302 keeps every click
+  measurable; there is no free right answer, but "I'd pick one" without noticing the
+  trade-off is a gap; (3) counter-based IDs leak volume and are guessable — fine here,
+  but they should say so rather than not notice.
+
+  Common SDE-2 failure modes: designing for a billion users because "scale"; putting a
+  queue between shorten and the DB without being able to say what problem it solves;
+  proposing Cassandra because "it's scalable" on a dataset smaller than one laptop's
+  disk. Redirect them gently back to the actual numbers.

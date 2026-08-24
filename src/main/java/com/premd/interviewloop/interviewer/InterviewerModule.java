@@ -101,6 +101,15 @@ public interface InterviewerModule {
         return null;
     }
 
+    /**
+     * How the latest artifact is introduced to the model in the prompt ("[label] …").
+     * Default suits editor buffers; modules with structured surfaces should override so
+     * the model knows what format it is reading.
+     */
+    default String artifactLabel() {
+        return "Current code/artifact";
+    }
+
     /** Cap on interviewer response length. Interview turns should be short; long ones flatter. */
     default int maxResponseTokens() {
         return 1536;

@@ -69,11 +69,11 @@ export function defaultLanguageFor(moduleType: ModuleTypeId): string {
   }
 }
 
-/** What the code pane is called for a given module — the artifact is not always code. */
+/** What the artifact pane is called for a given module — the artifact is not always code. */
 export function artifactLabelFor(moduleType: ModuleTypeId): string {
   switch (moduleType) {
     case 'hld':
-      return 'Design notes';
+      return 'System design graph';
     case 'lld':
       return 'Class model';
     case 'cs_fundamentals':

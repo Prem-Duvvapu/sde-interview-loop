@@ -96,6 +96,25 @@ public class PromptAssembler {
                                String phaseDirective,
                                String latestArtifact,
                                int maxTokens) {
+        return assemble(model, tools, rubric, persona, problemStatement, transcript,
+                phaseDirective, latestArtifact, "Current code/artifact", maxTokens);
+    }
+
+    /**
+     * As above, with a module-specific label for the artifact block. The label is pure
+     * presentation — it tells the model what kind of surface it is reading (code buffer,
+     * design graph) — and sits with the artifact after the last cache breakpoint.
+     */
+    public LlmRequest assemble(String model,
+                               List<LlmRequest.Tool> tools,
+                               String rubric,
+                               String persona,
+                               String problemStatement,
+                               List<LlmRequest.Message> transcript,
+                               String phaseDirective,
+                               String latestArtifact,
+                               String artifactLabel,
+                               int maxTokens) {
 
         LlmRequest request = assemble(model, tools, rubric, persona, problemStatement,
                 transcript, null, maxTokens);
@@ -109,7 +128,7 @@ public class PromptAssembler {
 
         if (latestArtifact != null && !latestArtifact.isBlank()) {
             messages.add(new LlmRequest.Message("user",
-                    "[Current code/artifact]\n" + latestArtifact, false));
+                    "[" + artifactLabel + "]\n" + latestArtifact, false));
         }
 
         return request.conversationMessages(messages);

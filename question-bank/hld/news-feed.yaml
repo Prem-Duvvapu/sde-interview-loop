@@ -1,0 +1,64 @@
+# Original prompt, written for this project. Social news feeds are a generic
+# system-design exercise pattern; the numbers, requirements and notes below are
+# original to this project (see D-5 in PROJECT_PLAN.md).
+slug: news-feed
+title: Social News Feed
+difficulty: medium-hard
+tags:
+  - fan-out
+  - read-write-ratio
+  - caching
+  - ranking
+
+statement: >
+  Design the home timeline for a Twitter-style product: when a user opens the app they
+  see the most recent posts from the accounts they follow, roughly in reverse-
+  chronological order.
+
+  Functional requirements:
+  - Users follow other users and post short posts (text + occasional image link).
+  - The home feed shows posts from everyone the user follows, newest first, paginated.
+  - A post should appear in followers' feeds within a few seconds of posting (soft goal).
+  - Unfollowing must remove that account's posts from future pages of the feed.
+
+  Scale to design for:
+  - 10 million daily active users; each opens the feed ~10 times/day.
+  - Average user follows ~150 accounts; but celebrity accounts have up to 5 million
+    followers.
+  - 5k posts/second at peak; feed reads outnumber writes by roughly 1000:1.
+
+constraints:
+  - The fan-out-on-write vs fan-out-on-read decision is the heart of this design — make
+    it explicitly, with numbers, including how you treat the celebrities.
+  - "Say what happens when a normal user follows someone new mid-scroll: what does the NEXT page of their feed contain?"
+
+example: >
+  Priya follows 120 friends plus two celebrities. Opening the app shows a merged,
+  newest-first page mixing both. When a celebrity posts, it reaches Priya's feed even
+  though that account has 4M followers — without the system writing 4M copies.
+
+interviewer_notes: >
+  The expected answer is hybrid: fan-out on write into per-user precomputed feeds
+  (cache/list structures) for normal users, with celebrity posts merged at READ time
+  (fan-out on read) or written lazily. At-bar candidates name both strategies and the
+  celebrity exception; above-bar candidates quantify why pure write-fan-out fails
+  (a single celeb post = millions of writes within seconds — the "thundering herd" on
+  one post) AND why pure read-fan-out fails (each app open = querying every followed
+  account's timeline, ~150 lookups × 100M opens/day).
+
+  Estimation anchors: 100M feed reads/day ≈ 1.2k reads/sec average, several times that
+  at peak; each read serves a page of ~20 entries from precomputed storage → cache hit
+  rates near 100% are achievable since feeds are personal and re-read often. Storage:
+  5k posts/sec × ~1 KB ≈ 400 GB/day raw — object storage for images, feed stores hold
+  references, not blobs.
+
+  Probes worth the time: (1) pagination consistency — offset paging over a changing
+  feed duplicates/drops posts; cursor keyed on (timestamp, post_id) is the fix; ask
+  what the next page contains when three new posts arrive mid-pagination; (2) the
+  unfollow requirement quietly kills naive fully-precomputed feeds unless unfollow
+  triggers targeted deletion or read-time filtering of recent pages — make them notice;
+  (3) where does the RANKING hook sit if product later wants non-chronological order —
+  precomputed feeds make global re-ranking expensive, read-time merge makes it natural.
+
+  Failure modes: "use Kafka" as architecture instead of mechanism; no answer for the
+  celebrity case; ignoring the unfollow constraint entirely after reading it.
