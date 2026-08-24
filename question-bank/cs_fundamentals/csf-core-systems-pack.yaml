@@ -1,0 +1,184 @@
+# Original content, written for this project. These are standard CS-fundamentals
+# interview topics; the specific questions, expected points and probes are original to
+# this project (see D-5 in PROJECT_PLAN.md).
+slug: csf-core-systems-pack
+title: Core systems fundamentals — networking, OS, storage
+difficulty: medium
+tags:
+  - networking
+  - os
+  - concurrency
+  - databases
+  - caching
+
+topics:
+  - name: Networking & HTTP
+    questions:
+      - prompt: "Walk me through what happens between typing a URL into the browser and the first byte of the response arriving."
+        expected_points:
+          - DNS resolution in the right order (browser/OS cache → resolver → root → TLD → authoritative)
+          - TCP three-way handshake, plus TLS handshake for HTTPS
+          - HTTP request goes out; server processes; response streams back
+        probes:
+          - "Where does the browser get DNS results without asking any resolver at all, and why is a long DNS TTL risky during a migration?"
+          - "HTTP/2 multiplexes requests over one connection — which earlier best practice did that make obsolete?"
+          - "If the page loads but images hang for exactly 30 seconds each, which layer do you suspect first and why?"
+
+      - prompt: "What is the practical difference between TCP and UDP, and when would you deliberately pick UDP for an API?"
+        expected_points:
+          - Ordered, reliable, connection-oriented vs fire-and-forget datagrams
+          - Head-of-line blocking as TCP's cost of reliability
+          - "Legit UDP uses: gaming/voice, telemetry where staleness beats loss, QUIC-style protocols layered on top"
+        probes:
+          - "TCP 'guarantees delivery' is a common phrasing — guarantee against what, exactly? What can it not protect?"
+          - "You need lossless delivery over UDP. What do you end up rebuilding, and when does that become worth it?"
+
+      - prompt: "A teammate says 'we got a 502 from the gateway'. What does that tell you about where the failure is, versus a 504? And a 503?"
+        expected_points:
+          - 502 = upstream returned garbage or dropped the connection mid-response
+          - 504 = upstream timed out — it was reachable but too slow
+          - 503 = the edge itself is refusing/refusing-to-forward, often load-shedding or maintenance
+        probes:
+          - "Which of the three would you alert on first for a slow-database incident, and why?"
+          - "Why do these live in the 5xx class rather than 4xx — who is the error 'about'?"
+
+      - prompt: "What does the Keep-Alive / connection reuse mechanism actually save, and roughly how much?"
+        expected_points:
+          - Avoids repeat TCP (+TLS) handshakes per request — one RTT for TCP, one to two more for TLS
+          - Keeps congestion window warm instead of slow-starting every request
+          - "Realistic saving: tens to hundreds of ms on high-latency links, per request"
+        probes:
+          - "What happens on the server when clients open keep-alive connections but stop sending requests? How do you bound that?"
+
+      - prompt: "Your API returns 200 OK with an error JSON body. Argue for and against, then take a side."
+        expected_points:
+          - "Against: breaks status-code semantics, generic clients/retries/circuit-breakers can't see failures"
+          - "For (rarely defensible): legacy constraints, avoiding client-side error handling paths"
+          - Side should be 'use real status codes' with awareness of when 4xx vs 5xx matters for retries
+        probes:
+          - "Which status code for 'request was valid but the account is over quota', and should the client retry it automatically?"
+          - "Where does 429 belong relative to rate limiting at the gateway versus in the service?"
+
+  - name: Operating systems & threads
+    questions:
+      - prompt: "What's the difference between a process and a thread, and what does a thread actually share with its siblings?"
+        expected_points:
+          - Process = isolated address space + resources; thread = scheduling unit inside one address space
+          - Threads share heap, open file descriptors, code; each has own stack, registers, program counter
+          - "Consequence: cheap context switching within a process, but shared-state bugs"
+        probes:
+          - "Why is a stack overflow in one thread able to kill a whole JVM process rather than just that thread's stack?"
+          - "In the 1-threads-per-request model, name two resources that run out before CPU does under load."
+
+      - prompt: "Explain deadlock to me, then tell me the four conditions that must all hold for one to be possible."
+        expected_points:
+          - Mutual exclusion, hold-and-wait, no preemption, circular wait — all four required
+          - Practical prevention usually attacks circular wait via lock ordering
+        probes:
+          - "Two threads acquire locks A then B, and B then A. Give me the minimal fix and its cost."
+          - "How would you confirm a production JVM is deadlocked rather than merely slow? Name the tool."
+
+      - prompt: "What is the difference between concurrency and parallelism? Is a single-core machine capable of concurrent execution?"
+        expected_points:
+          - Concurrency = interleaved progress on many tasks; parallelism = simultaneous progress
+          - Yes — single core time-slices; concurrency is a program-structure property
+          - I/O-bound vs CPU-bound workloads relate directly to this distinction
+        probes:
+          - "A service does 5ms of CPU work and 95ms of waiting per request, single core, 100 threads. Roughly what throughput? Why doesn't CPU saturate?"
+
+      - prompt: "What does the OS page cache do for a database like Postgres or MySQL, and what happens when you memory-map a file versus read() it?"
+        expected_points:
+          - Page cache keeps file blocks in free RAM; reads hit RAM after first disk touch
+          - Database buffer pools are user-space caches layered on top, sometimes fighting the OS cache by double-caching
+          - mmap maps file pages into address space; page faults fault them in, kernel manages eviction
+        probes:
+          - "If you drop the OS caches on a busy DB host (echo 3 > drop_caches), what does latency look like for the next few minutes and why?"
+          - "Why do most databases implement their own buffer pool instead of trusting the page cache alone?"
+
+      - prompt: "Context switches: what gets switched, and what makes them expensive beyond the bookkeeping?"
+        expected_points:
+          - Registers, program counter, kernel stack pointer; address space switch if crossing processes
+          - "Real costs: cache/TLB pollution — the next thread runs cold"
+          - Excessive switching shows as high sys time with low useful throughput
+        probes:
+          - "Given vmstat output with 20k context switches/sec and 30% idle CPU, is the system healthy? What would you check next?"
+
+  - name: Databases & storage
+    questions:
+      - prompt: "You have a query filtering on a non-indexed column doing a full table scan. Walk me through what adding an index changes, physically."
+        expected_points:
+          - Index = separate sorted structure (B-tree) mapping column values → row locations
+          - Read goes from O(n) scan to O(log n) descent + row fetches
+          - "Costs on write: every INSERT/UPDATE of indexed columns also maintains the tree"
+        probes:
+          - "When can the optimizer refuse your shiny index even though the column is indexed? Name two cases."
+          - "Composite index on (a, b): which of WHERE b=? alone, ORDER BY a, WHERE a=? AND b>? can use it? Why?"
+
+      - prompt: "Explain the difference between a clustered and a non-clustered index. Where does this show up concretely in MySQL versus Postgres?"
+        expected_points:
+          - Clustered index stores rows in index order (InnoDB primary key); secondary indexes store PK references
+          - "Non-clustered: index and heap are separate; leaf points to physical location"
+          - "Concrete: InnoDB secondary-index lookups pay double lookup unless covering; Postgres indexes point to heap tuples"
+        probes:
+          - "Why does a random (not monotonic) primary key hurt InnoDB insert performance specifically?"
+          - "What is a covering index and when would you add columns to an index purely to create one?"
+
+      - prompt: "Two bank transfers run concurrently, each reading a balance, adding 100, writing back. Walk me through what can go wrong and every mechanism you know of to prevent it."
+        expected_points:
+          - Lost update via read-modify-write race
+          - "Mechanisms: pessimistic locking (SELECT FOR UPDATE), optimistic locking (version column/CAS), atomic UPDATE ... SET x = x + 100, serializable isolation"
+          - Should connect isolation levels to which anomalies they permit (dirty read, non-repeatable read, phantom)
+        probes:
+          - "At READ COMMITTED, does the atomic single-statement UPDATE still lose the update? Why not — what does the row lock do during it?"
+          - "Optimistic locking under heavy contention on one hot row — what does the retry storm look like and when do you switch strategies?"
+
+      - prompt: "What does database connection pooling buy you, and what breaks when the pool is smaller than the thread count that wants connections?"
+        expected_points:
+          - Pool amortizes TCP+TLS+auth setup and caps concurrent DB sessions
+          - Oversubscribed pool → waiters queue; request latency climbs; timeouts cascade
+          - Pool sizing relates to DB-side capacity, not thread count
+        probes:
+          - "HikariCP's default advice is pools much smaller than people expect (tens, not hundreds). Why does a bigger pool frequently make throughput worse?"
+          - "Where do queued requests wait when the pool is exhausted — and what does that do to your p99 versus your average?"
+
+      - prompt: "What problem do write-ahead logs solve? If the database crashes between the data-page write and the commit record, what happens on restart?"
+        expected_points:
+          - "WAL: log the change durably before applying to pages; enables crash recovery via redo/undo"
+          - Restart replays committed transactions' log (redo), unrolls uncommitted (undo)
+          - Group commit / fsync trade-off sits here
+        probes:
+          - "Why is fsync-per-commit expensive, and name one way databases batch commits without losing durability guarantees."
+
+  - name: Caching
+    questions:
+      - prompt: "Cache aside, read-through, write-through, write-back — define the ones you know and say which you'd pick for a product catalogue."
+        expected_points:
+          - "Cache-aside: app reads cache, falls back to DB, populates cache; simplest and most common"
+          - "Write-through: writes go through cache to DB synchronously; write-back: buffered, risk on crash"
+          - "Product catalogue: read-heavy, tolerates slight staleness → cache-aside with TTL is the sane default answer"
+        probes:
+          - "In cache-aside, two threads miss on the same cold key simultaneously — what happens downstream and does it matter?"
+          - "Why is write-back rarely acceptable for payments but fine for view counters?"
+
+      - prompt: "What is a cache stampede / thundering herd, and name two ways to prevent one."
+        expected_points:
+          - Hot key expires; thousands of requests miss simultaneously and all hit the DB
+          - "Prevents: mutex/single-flight (one refiller), probabilistic early expiry, serving stale while refreshing"
+        probes:
+          - "Which prevention would you choose for a key that's expensive to recompute but queried 10k times/sec? What's its failure mode?"
+
+      - prompt: "LRU evicts the least-recently-used entry. Why do real caches use approximations of LRU rather than exact LRU?"
+        expected_points:
+          - Exact LRU needs a linked list + hash map with O(1) moves on every access — lock contention and pointer overhead
+          - "Approximations: Redis samples keys, Clock/second-chance uses reference bits"
+          - "Adversarial case: scanning a slightly-larger-than-cache dataset evicts everything (protect with segments, e.g. W-TinyLFU)"
+        probes:
+          - "Caffeine's W-TinyLFU admits new entries based on frequency sketches — what classic workload does that defeat that plain LRU loses to?"
+
+      - prompt: "TTLs: what's the actual contract of a cached value with TTL 60 seconds in front of a database that updates continuously?"
+        expected_points:
+          - Staleness bounded by TTL only approximately — depends on origin of change vs cache population
+          - TTL bounds worst-case staleness for cache-aside; explicit invalidation narrows it but adds coupling
+          - Answer should distinguish 'fresh enough' per use case rather than treating staleness as binary
+        probes:
+          - "After updating a row, you delete its cache key. A stale value written by an in-flight older read can repopulate the cache afterwards — walk through that race and one mitigation."

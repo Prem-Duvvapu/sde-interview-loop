@@ -1,0 +1,72 @@
+# Original content, written for this project. Singleton-bean thread-safety is standard
+# Spring/JVM behaviour; this scenario and its probes are original to this project
+# (see D-5 in PROJECT_PLAN.md).
+slug: singleton-state-race
+title: The request counter that dropped zeros under load
+difficulty: medium
+tags:
+  - spring
+  - concurrency
+  - bean-lifecycle
+  - debugging
+
+scenario: >
+  A controller keeps simple usage stats in memory:
+
+      @RestController
+      public class ReportController {
+          private Map<String, Integer> hitsByTenant = new HashMap<>();
+
+          @GetMapping("/report")
+          public ResponseEntity<Report> report(@RequestHeader("X-Tenant") String tenant) {
+              hitsByTenant.merge(tenant, 1, Integer::sum);
+              return ResponseEntity.ok(reportService.build(tenant));
+          }
+
+          @GetMapping("/stats")
+          public Map<String, Integer> stats() { return hitsByTenant; }
+      }
+
+  In staging with one tester it is correct. In production: occasionally two tenants'
+  counts get merged into nonsense values, once a ConcurrentModificationException was
+  logged from /stats, and after a deploy the counters reset to zero.
+
+constraints:
+  - Name every distinct defect — there are at least four, including the deploy reset.
+  - For each, say the minimal fix and whether you'd bother fixing it or delete the idea.
+
+expected_diagnosis: >
+  Defects: (1) HashMap.merge is not atomic — concurrent merges lose updates (the
+  'merged into nonsense' symptom is actually read-tearing/lost updates; strict nonsense
+  values suggest they also see interleaved resize corruption); (2) iterating hitsByTenant
+  in /stats while writers mutate it throws CME and can expose torn state — HashMap has no
+  snapshot semantics; (3) mutable state in a stateless-scope bean is shared across ALL
+  requests — the design itself is wrong at any real QPS; (4) reset on deploy because the
+  map lives in-process — anything needed across restarts does not belong in heap. Fixes:
+  ConcurrentHashMap with LongAdder per tenant if they must keep it local; better, push
+  counters somewhere that owns aggregation (metrics library → registry; or DB/Redis).
+  /stats should publish an unmodifiable copy. Above-bar: mentions visibility (no
+  happens-before between writer and reader threads on a plain HashMap), and notes that
+  'works in staging' is exactly one-thread behaviour masking races.
+
+probes:
+  - "You said 'not thread safe'. Which two specific interleavings produce a lost update
+     in merge()? Walk one through step by step."
+  - "Why is the CME possible even though nobody removes entries during iteration?"
+  - "If we made this field volatile, which of the symptoms would go away? (Trick — why
+     'almost none' is the right instinct.)"
+
+trade_off_questions:
+  - "LongAdder vs AtomicLong vs synchronized long for per-tenant counters with hot keys
+     — when does each win?"
+  - "The team proposes @Scope('prototype') so every request gets its own map. Evaluate
+     that seriously: what does it accidentally solve, what does it break?"
+
+interviewer_notes: >
+  At-bar = identifies unsynchronized shared mutable state, proposes ConcurrentHashMap or
+  moving counters out of process, explains the deploy reset. Above-bar = articulates the
+  merge() interleaving concretely, knows CME mechanics, rejects prototype-scope as a
+  non-fix, suggests Micrometer/registry as the actual home for counters. Below-bar =
+  'use synchronized everywhere' as the only tool, or blames the framework. This scenario
+  doubles as the concurrency-correctness probe for the whole round: make them walk the
+  interleaving line by line before accepting any fix proposal.

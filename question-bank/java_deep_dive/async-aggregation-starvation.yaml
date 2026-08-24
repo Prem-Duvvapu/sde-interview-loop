@@ -1,0 +1,70 @@
+# Original content, written for this project. CompletableFuture and executor-pool
+# behaviour are standard JDK semantics; this scenario and its probes are original to
+# this project (see D-5 in PROJECT_PLAN.md).
+slug: async-aggregation-starvation
+title: The parallel calls that became serial, then died
+difficulty: medium-hard
+tags:
+  - concurrency
+  - completable-future
+  - executors
+  - resilience
+
+scenario: >
+  A pricing service aggregates three downstream quotes. Someone 'optimised' it:
+
+      private final ExecutorService pool = Executors.newFixedThreadPool(4);
+
+      public Quote quote(Request r) {
+          CompletableFuture<Integer> a = supplyAsync(() -> vendorA.price(r), pool);
+          CompletableFuture<Integer> b = supplyAsync(() -> vendorB.price(r), pool);
+          CompletableFuture<Integer> c = supplyAsync(() -> vendorC.price(r), pool);
+
+          return new Quote(a.join(), b.join(), c.join());
+      }
+
+  Load test results: throughput is HALF of the sequential version, threads in the pool
+  sit mostly in WAITING, and under a vendor-A outage the whole executor wedges — even
+  vendor-B-only requests stop working. Someone suggests the fix is a bigger pool.
+
+constraints:
+  - Explain why 'parallel' produced lower throughput before you touch the outage.
+  - Then explain the wedge, and design the timeout + degradation policy you'd ship.
+
+expected_diagnosis: >
+  Throughput: join() blocks the calling thread; if quote() itself runs on one of this
+  same 4-thread pool's siblings (or a small request pool), blocking joins serialize —
+  plus context-switch overhead and no overlap benefit when callers outnumber pool
+  threads: with 4 threads and three tasks per call, barely one call proceeds at a time,
+  so it can be SLOWER than sequential while burning more memory. Wedge: vendorA hangs
+  (no timeouts configured on the HTTP client or the future), join() blocks forever,
+  all four pool threads end up parked on dead futures; B and C starve because their
+  tasks never get scheduled. Fixes: (1) per-vendor timeouts — orTimeout / completeOnTimeout,
+  or better, socket-level timeouts in the HTTP client; (2) don't block: compose via
+  thenCombine/allOf and return a CompletableFuture from the controller (Spring MVC
+  supports it) so no thread waits; (3) isolate vendors on separate pools/bulkheads so
+  one vendor's failure cannot consume every worker; (4) degrade: serve partial quotes
+  with completeOnTimeout(DEFAULT). 'Bigger pool' treats neither disease.
+
+probes:
+  - "Walk through what each of the four pool threads is doing during ONE quote() call.
+     Where does the caller of quote() run?"
+  - "join() vs get(timeout) vs orTimeout — which of these actually stops the underlying
+     vendor call, and where must the real cancellation happen?"
+  - "If quote() is called 100 times concurrently right now, how many make progress?
+     Show the arithmetic."
+
+trade_off_questions:
+  - "Dedicated per-vendor pools vs one shared pool with bulkhead semantics vs virtual
+     threads (Java 21) — argue what changes and what still doesn't."
+  - "completeOnTimeout with a cached default risks quoting stale prices. How would you
+     bound that staleness honestly?"
+
+interviewer_notes: >
+  At-bar = spots blocking-joins-defeat-parallelism AND missing timeouts as the wedge
+  cause, proposes per-call timeouts. Above-bar = non-blocking composition end-to-end,
+  bulkhead isolation, honest answer that orTimeout cancels only the future not the IO.
+  Below-bar = 'increase pool size to 32', which they should be made to defend against
+  the arithmetic. Strong signal: candidate asks who CALLS quote() and on what pool —
+  the interaction between caller pool and task pool is where the real understanding
+  lives. Keep them concrete: refuse answers that stay at the word 'async'.

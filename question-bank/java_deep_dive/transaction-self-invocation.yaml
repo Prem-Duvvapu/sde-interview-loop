@@ -1,0 +1,80 @@
+# Original content, written for this project. Spring's proxy-based transaction semantics
+# are documented framework behaviour; this scenario and its probes are original to this
+# project (see D-5 in PROJECT_PLAN.md).
+slug: transaction-self-invocation
+title: The @Transactional method that never had a transaction
+difficulty: medium
+tags:
+  - spring
+  - transactions
+  - aop
+  - debugging
+
+scenario: >
+  An onboarding service creates a user and, in the same request, writes an audit row.
+  Someone reported that when the audit insert fails, the user creation is NOT rolled
+  back — even though both sit inside one annotated method:
+
+      @Service
+      public class OnboardingService {
+
+          @Transactional
+          public void onboard(UserDto dto) {
+              userRepository.save(new User(dto));
+              auditService.record("USER_CREATED", dto.email());   // (A)
+              welcomeMailQueue.enqueue(dto);                      // (B)
+          }
+      }
+
+  Wait — look again. `record(...)` at (A) is itself annotated @Transactional. During an
+  incident review you notice something else: someone recently inlined a private helper
+
+      private void validate(UserDto dto) { ... }   // has @Transactional too
+
+  and calls it from onboard() directly. And (B) is a best-effort step: if the mail
+  queue is down, they'd rather keep the user than fail the whole request.
+
+constraints:
+  - First explain why the rollback does not happen for the failure mode reported.
+  - "Then fix it three ways: minimal diff, idiomatic refactor, and framework-level alternative."
+
+expected_diagnosis: >
+  Two separate issues hide here. Primary bug: Spring transactions are implemented by
+  proxies — the advice wraps calls arriving from OUTSIDE the bean. A self-invocation
+  (this.helper()) or a call into another bean's method from within an already-running
+  transactional call does not open the transaction boundary people assume; more
+  precisely for the reported symptom: the inner record() joins the caller's transaction,
+  so 'audit fails' should roll back... unless the real cause is that the exception is
+  caught/swallowed somewhere, OR record() was called via self-reference bypassing the
+  proxy so its annotation never applied and its DB write auto-committed independently.
+  Candidates should identify which of these is actually in play and say how they would
+  prove it (log the transaction status; check TransactionSynchronizationManager;
+  enable proxy logging). Fixes: (1) move the logic into a separate bean so calls cross a
+  proxy boundary; (2) inject the service into itself / use AopContext.currentProxy()
+  (with exposeProxy) — works but smells; (3) TransactionTemplate programmatic
+  demarcation for fine control. For (B): noRollbackFor or REQUIRES_NEW on the queue
+  enqueue is the wrong instinct — decouple it out of the transaction entirely (event
+  after commit via @TransactionalEventListener(phase = AFTER_COMMIT)).
+
+probes:
+  - "Draw me what the proxy call stack looks like for a working case, then for the
+     broken self-invocation — where exactly does the interceptor get skipped?"
+  - "You said 'the annotation is ignored'. Ignored always, or only in some directions?
+     Does the outer call's transaction still apply?"
+  - "How do you PROVE which explanation is right before changing code — what would you
+     log or inspect first?"
+
+trade_off_questions:
+  - "Self-injection vs moving methods to another bean vs TransactionTemplate — pick one
+     for a codebase with 40 services and say why your choice survives code review."
+  - "REQUIRES_NEW on the audit write looks tempting. What does it do to consistency —
+     can the audit now exist for a user row that rolled back? Is that acceptable here?"
+
+interviewer_notes: >
+  At-bar = names proxy-based AOP as the mechanism and produces the separate-bean fix.
+  Above-bar = disambiguates the swallowed-exception vs self-invocation hypotheses and
+  proposes evidence to distinguish them BEFORE refactoring, plus AFTER_COMMIT events for
+  (B). Below-bar = 'add @Transactional everywhere' without explaining propagation, or
+  claims annotations never work. Watch for candidates who have only used transactions
+  via JPA repositories and cannot articulate commit boundaries — probe what happens to
+  the audit row if the process dies between (A) committing alone and (B).

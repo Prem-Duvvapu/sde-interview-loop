@@ -1,0 +1,72 @@
+# Original content, written for this project. JVM reachability and old-gen behaviour
+# are standard; this scenario and its probes are original to this project (see D-5 in
+# PROJECT_PLAN.md).
+slug: static-cache-oldgen-thrash
+title: The Sunday 4am restart everyone accepts
+difficulty: medium
+tags:
+  - jvm
+  - memory
+  - gc
+
+scenario: >
+  A pricing service caches per-product margin rules from the DB in-process:
+
+      private static final Map<String, MarginRule> RULES = new ConcurrentHashMap<>();
+
+      public static MarginRule get(String productId) {
+          return RULES.computeIfAbsent(productId, repo::load);
+      }
+
+  Nothing ever evicts. Over months of new products, heap usage climbs slowly. Old-gen
+  occupancy sits at 95% within days of each restart; GC pause warnings rise week over
+  week. The team has normalised a scheduled restart every Sunday at 4am because "it
+  gets slow otherwise". One recent peak-traffic incident logged a single
+  java.lang.OutOfMemoryError: Java heap space, after which latency recovered — but the
+  restart ritual continued unchanged.
+
+constraints:
+  - Characterise what kind of leak this is (the memory IS reachable — so why call it a
+    leak at all?) before proposing fixes.
+  - "Give the fix hierarchy: immediate stopgap, real fix, and the operational guardrail that should have caught this in staging."
+
+expected_diagnosis: >
+  Classic unintended-reachable-data leak: every rule ever loaded stays strongly
+  reachable via the static root set, so GC can never reclaim it. Old gen fills with
+  LIVE objects; full GCs run more often on a bigger live set until pauses dominate
+  latency (the gradual slowdown) and one allocation spike tips into OOM. Calling it a
+  leak is fair operationally even though reachability-wise GC is behaving exactly
+  correctly. Stopgaps: -XX:+HeapDumpOnOutOfMemoryError plus restart scheduling is what
+  they already do — the honest stopgap is bounding the cache (Caffeine maximumSize /
+  weigher) since most rules are cold after weeks. Real fix: load rules on demand with
+  bounded eviction, or move shared config out of every instance's heap entirely (Redis
+  / config service) if the working set no longer fits. Guardrails that should have
+  caught it in staging: alerting on old-gen occupancy TREND (not just current), and a
+  soak test running days not minutes. Above-bar candidates note the OOM-recovery
+  paradox: after OOM kills one request's allocations the JVM can continue fine because
+  the problem is cumulative, not instantaneous.
+
+probes:
+  - "GC never reclaims any of this. Is GC broken here? Explain who is responsible for
+     each object in RULES staying alive."
+  - "Why does the slowdown arrive GRADUALLY over days rather than as a cliff? Connect
+     full-GC frequency to old-gen fill rate."
+  - "You propose Caffeine with maximumSize. What happens to correctness when a hot
+     margin rule is evicted mid-request-burst — is eviction merely slow or can it be
+     wrong?"
+
+trade_off_questions:
+  - "Bounded in-process cache vs shared external store for these rules — where does the
+     line sit given the rules' size, read rate and staleness tolerance?"
+  - "WeakHashMap or soft references look like a free fix here. Why are reference-based
+     caches widely considered a trap compared to explicit eviction policy?"
+
+interviewer_notes: >
+  At-bar = explains static-root reachability, why old-gen fills with LIVE data, and
+  proposes bounded eviction or external store. Above-bar = articulates the gradual-
+  degradation mechanism (full-GC frequency scaling with live-set growth), flags the
+  Sunday-restart normalisation as an operational smell masking the leak, and knows
+  HeapDumpOnOutOfMemoryError + dominator analysis as the confirmation path. Below-bar =
+  'increase heap size', which only moves the cliff; make them defend it against months
+  of growth. If the candidate has never run a heap dump, probe conceptually instead:
+  what would you EXPECT to see dominating the dominator tree?

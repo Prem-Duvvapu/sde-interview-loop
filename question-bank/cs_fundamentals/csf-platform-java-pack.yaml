@@ -1,0 +1,136 @@
+# Original content, written for this project. These are standard CS-fundamentals /
+# platform topics; the specific questions, expected points and probes are original to
+# this project (see D-5 in PROJECT_PLAN.md).
+slug: csf-platform-java-pack
+title: Platform fundamentals — collections internals, JVM memory, REST, auth, Git
+difficulty: medium
+tags:
+  - data-structures
+  - jvm
+  - rest
+  - security
+  - tooling
+
+topics:
+  - name: Data structure internals
+    questions:
+      - prompt: "How does a HashMap work internally — what happens on put(key, value), start to finish?"
+        expected_points:
+          - hash(key) → bucket index (hash spread, capacity mask)
+          - Bucket holds entries; collisions chain (or treeify into red-black trees at ≥8 in Java)
+          - Load factor 0.75 triggers resize/rehash of the table
+        probes:
+          - "Why did Java 8 start converting long chains into red-black trees? What attack does that blunt?"
+          - "A key class doesn't override hashCode. Where do your entries land and what's the performance profile of get()?"
+
+      - prompt: "What goes wrong — or right — if you use a TreeMap instead of a HashMap for the same workload? Compare honestly."
+        expected_points:
+          - "TreeMap: sorted iteration, range queries, O(log n) ops; HashMap O(1) average but unordered"
+          - TreeMap requires Comparable/Comparator; HashMap needs well-spread equals/hashCode
+          - Memory and constant factors differ; most lookups want HashMap unless ordering is required
+        probes:
+          - "You need 'all accounts with balance between X and Y'. Why does HashMap make this awkward, and what does TreeMap give you directly?"
+
+      - prompt: "Explain why String is immutable in Java and what breaks if it weren't."
+        expected_points:
+          - String pool sharing safe only under immutability
+          - Keys in maps need stable hashCode over lifetime
+          - "Security: classpath/URL/file parameters can't be mutated mid-check"
+          - Thread safety falls out for free
+        probes:
+          - "If String were mutable, would StringBuilder still exist? What exactly would its job become?"
+
+      - prompt: "When would you reach for an ArrayDeque over a LinkedList, and why is LinkedList usually the wrong default?"
+        expected_points:
+          - "ArrayDeque: contiguous array, circular; better locality, less per-node overhead"
+          - LinkedList allocates a node per element; each node costs object header + two pointers
+          - Random access on LinkedList is O(n) walks
+        probes:
+          - "LinkedList is O(1) insert-at-head versus array shifting — so when does ArrayList still beat it at head-heavy workloads?"
+
+      - prompt: "What is a Bloom filter, what can it never tell you, and where does one belong in a backend system?"
+        expected_points:
+          - Probabilistic set membership; false positives possible, false negatives never
+          - Cannot enumerate members or delete (without counting variants)
+          - "Backend use: skip expensive lookups — 'definitely not present' short-circuits DB/IO calls"
+        probes:
+          - "Your Bloom filter says a user ID exists, but the row isn't in the DB. What happened and why is that acceptable by design?"
+
+  - name: JVM memory & garbage collection
+    questions:
+      - prompt: "Walk me through what happens from `new Object()` to it being collectable. Where does it live, and who decides when it dies?"
+        expected_points:
+          - Allocation in Eden (young gen); GC decides liveness via reachability from GC roots
+          - Survivors get copied between survivor spaces; tenuring promotes to old gen
+          - Collectable = unreachable from roots, not 'reference count zero' (Java has no refcounting)
+        probes:
+          - "Name three things that count as GC roots. Is a static field one, and what does that imply about static caches?"
+          - "An object has a finalize()-style cleaner pending — how does that affect when its memory actually returns?"
+
+      - prompt: "What's the difference between a memory leak in C and a memory leak in Java? Can Java leak at all?"
+        expected_points:
+          - Java leaks = unintended reachable references (static maps, listeners never deregistered, unbounded caches)
+          - Old gen fills → GC thrash → OOM heap space eventually
+          - "Diagnosis: heap dump, dominator tree, growth-by-allocation-site profiling"
+        probes:
+          - "A service's RSS climbs 200MB/day but heap usage is flat. Name two non-heap suspects."
+
+      - prompt: "Minor GC versus major/full GC — what triggers each, and what does 'stop the world' actually stop?"
+        expected_points:
+          - "Minor: Eden full, young collection, usually fast because most objects die young"
+          - "Major/old-collection: promotion pressure or old-gen occupancy thresholds"
+          - STW pauses application threads; concurrent collectors move much of the work off-pause but still pause for phases
+        probes:
+          - "Promotion failure / premature promotion: what workload pattern causes young objects to land in old gen, and why is that painful?"
+          - "G1 pauses are bounded by region size — roughly why does making the heap enormous tend to lengthen full-GC pain even with G1?"
+
+      - prompt: "What is a soft reference, weak reference, phantom reference — and which one would you use for an in-memory cache that must not OOM the JVM?"
+        expected_points:
+          - "Weak: collected eagerly next GC once unreferenced (WeakHashMap keys); Soft: collected under memory pressure"
+          - "Phantom: enqueued after finalization, for native-resource cleanup, no get()"
+          - "Cache answer: soft references historically, but honest answer is 'use Caffeine with weight-based eviction' — reference queues lose to real eviction policy"
+        probes:
+          - "WeakHashMap's *value* holding a strong reference to its *key* is a classic footgun — walk through why entries stop being evictable."
+
+  - name: REST & API design
+    questions:
+      - prompt: "PUT versus PATCH versus POST for updates — what's the semantic difference, not just convention?"
+        expected_points:
+          - PUT = full replacement, idempotent at a known URI; PATCH = partial change semantics defined by media type; POST = server-decides processing/creation
+          - Idempotency is the load-bearing property clients build retries on
+        probes:
+          - "A client retries your POST /payments twice during a network blip and the customer is charged twice. Which HTTP property was violated and which header/pattern repairs it?"
+
+      - prompt: "Design the status code + response body contract for these four outcomes: created, validation failed, throttled, downstream dependency down."
+        expected_points:
+          - 201 (+Location), 400/422 with field errors, 429 (+Retry-After), 502/503/504 distinguishing who failed
+          - Error bodies consistent (machine-readable code, human message, trace id)
+        probes:
+          - "For the dependency-down case, should your API return 500 or 503 from the client's perspective — what changes in their retry behaviour either way?"
+
+      - prompt: "Your list endpoint paginates. Offset pagination versus cursor pagination — argue both, then say which survives a 'load more while items are inserted' scenario correctly."
+        expected_points:
+          - "Offset: simple, jumpable; skips/duplicates rows under concurrent inserts; cost grows with page depth"
+          - "Cursor: stable under mutation, constant-cost, but opaque and usually forward-only"
+          - "Correct under insertion: cursor keyed on stable sort column"
+        probes:
+          - "What makes a good cursor key column, and why is auto-increment id safer than created_at alone?"
+
+  - name: Auth & security basics
+    questions:
+      - prompt: "Sessions versus JWTs for keeping a user logged in across requests — lay out the trade-off like you're choosing for our team."
+        expected_points:
+          - "Sessions: server-side state, instantly revocable, needs shared store behind multiple instances"
+          - "JWT: self-contained, no lookup per request, but revocation is hard without a blocklist — which reintroduces state"
+          - "Sensible hybrid: short-lived access token + refresh token flow"
+        probes:
+          - "'JWTs are stateless' — where does that claim break the moment you implement logout properly?"
+          - "Where do you store the token in a browser, and what attack does localStorage expose that an HttpOnly cookie mostly closes? What does the cookie re-open you to instead?"
+
+      - prompt: "Password storage: why bcrypt/argon2 rather than SHA-256, in one sentence each reason?"
+        expected_points:
+          - Hashing speed is the enemy — fast hashes enable brute force at GPU rates
+          - Salt kills rainbow tables; per-user salt means identical passwords don't match
+          - Work factor tunable as hardware improves
+        probes:
+          - "You migrate from SHA-256 to bcrypt. How do you rehash existing passwords users haven't logged in with for a year?"

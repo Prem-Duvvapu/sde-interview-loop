@@ -1,0 +1,63 @@
+# Original content, written for this project. The equals/hashCode contract is standard
+# Java; this scenario and its probes are original to this project (see D-5 in
+# PROJECT_PLAN.md).
+slug: mutable-key-hashmap
+title: The cache that lost its entries
+difficulty: medium
+tags:
+  - collections
+  - equals-hashcode
+  - debugging
+
+scenario: >
+  A billing service keeps an in-process cache:
+
+      private final Map<UserKey, PriceRule> cache = new ConcurrentHashMap<>();
+
+  `UserKey` has two fields, `tenantId` (String) and `userId` (long), written as a final
+  class with equals() and hashCode() implemented correctly over both fields.
+
+  A refactor adds `setTenantId(String)` so a batch job can "rename" tenants by mutating
+  existing keys in place before doing lookups. Within hours: lookups that used to hit
+  start missing, heap use creeps up, and a few customers briefly see another tenant's
+  price rules.
+
+  You are on call. Diagnose it.
+
+constraints:
+  - Explain the bug mechanically — what happens inside the map — before proposing fixes.
+  - Then give the fix, and say whether this class should be mutable at all.
+
+expected_diagnosis: >
+  Mutating tenantId after insertion changes what hashCode() returns, but the entry stays
+  bucketed under its original hash. So: get() hashes the mutated key into a different
+  bucket than where the entry lives — guaranteed miss; misses re-put fresh entries —
+  duplicates and creeping memory; and entries whose stored key no longer matches their
+  bucket position can be matched by equals() against a different tenant's mutated key in
+  the same chain — cross-tenant leakage. Fix: make UserKey deeply immutable (final
+  fields, no setters; a record does this), and replace-not-mutate in the rename job.
+  Above-bar insight: even remove(key) is unreliable once a key has been mutated, because
+  remove re-hashes too — recovery needs the original values.
+
+probes:
+  - "Be precise about 'wrong bucket': which structure inside ConcurrentHashMap still
+     holds the OLD hash, and when does anything ever recompute it?"
+  - "Misses alone shouldn't show another tenant's data. Walk me from a hash collision to
+     customer-visible wrongness."
+  - "You propose immutability. What does the Java record feature generate that this
+     hand-written class would no longer need?"
+
+trade_off_questions:
+  - "Immutable keys allocate on every rename. When does that allocation rate actually
+     matter, and what would you do then?"
+  - "Some teams reach for computeIfAbsent with recursive updates here. Why is recursive
+     mapping-function work on ConcurrentHashMap a known trap?"
+
+interviewer_notes: >
+  The candidate must connect the textbook contract (hashCode stable while key is in the
+  map) to three observed symptoms: misses, memory growth, cross-tenant leak. At-bar =
+  explains the stale-bucket mechanism and prescribes immutability. Above-bar = spots that
+  removal/recovery also breaks once mutated, and names record/Map.copyOf as enforcement.
+  Below-bar = blames ConcurrentHashMap for being 'not thread safe' or proposes only
+  'synchronize the cache' without touching mutability of the key. Do not teach the
+  answer; escalate hint level instead if they stall after the first probe.

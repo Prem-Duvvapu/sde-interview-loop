@@ -1,0 +1,68 @@
+# Original content, written for this project. N+1 queries and pool exhaustion are
+# standard JPA/pooling behaviour; this scenario and its probes are original to this
+# project (see D-5 in PROJECT_PLAN.md).
+slug: orders-endpoint-pool-exhaustion
+title: p99 climbs until the pool runs dry
+difficulty: medium-hard
+tags:
+  - jpa
+  - hibernate
+  - connection-pool
+  - performance
+
+scenario: >
+  A dashboard endpoint lists an organisation's recent orders:
+
+      @GetMapping("/orgs/{id}/orders")
+      public List<OrderDto> orders(@PathVariable long id) {
+          return orderRepository.findTop50ByOrgIdOrderByCreatedAtDesc(id).stream()
+                  .map(OrderDto::from)          // touches order.getCustomer().getName()
+                  .toList();                     // and order.getItems() size + first sku
+      }
+
+  Under normal traffic it responds in 80 ms. During month-end it degrades: p99 climbs to
+  4 s, then every endpoint in the app starts timing out — including ones that never
+  touch orders. Logs show `HikariPool-1 - Connection is not available, request timed out
+  after 30000ms`. The DB server itself shows only moderate load.
+
+constraints:
+  - Explain BOTH the per-request inefficiency and the global collapse, and how the first
+    causes the second.
+  - "Give the fix hierarchy: what you change in the query, what you change in mapping, and when a DTO projection is simply better."
+
+expected_diagnosis: >
+  Per-request: classic N+1 — one query for orders, then two more per order (customer,
+  items) as the mapper walks lazy associations: ~101 queries for 50 rows. Month-end
+  doubles row counts and concurrent users; each request now holds its pooled connection
+  far longer (101 round-trips), pool saturates, every other feature queues behind the
+  same exhausted pool — that is why unrelated endpoints die. Global collapse mechanism
+  is the key insight: pool exhaustion converts a slow-feature bug into an outage.
+  Fixes, best-first: (1) fetch join or @EntityGraph for customer+items in ONE query —
+  careful, joining two collections multiplies rows (MultipleBagFetchException /
+  cartesian blow-up), so split into two paginated queries or use IN-batch loading;
+  (2) DTO/JPQL constructor projection so Hibernate never loads managed entities at all;
+  (3) tune pool AFTER fixing the query — raising maxPoolSize masks the disease and can
+  push overload into the database instead.
+
+probes:
+  - "You said 'N plus one'. Count the exact number of SQL statements for 50 orders with
+     your fix applied versus without."
+  - "Why does adding spring.datasource.hikari.maximum-pool-size=200 not fix anything?
+     What does the queue of waiters look like afterwards?"
+  - "fetch join on BOTH customer and items — what happens? Explain the row explosion
+     with concrete arithmetic."
+
+trade_off_questions:
+  - "EntityGraph vs explicit JPQL fetch join vs two queries — which do you pick when the
+     list also needs pagination, and why does LIMIT + fetch-join interact badly?"
+  - "Open-session-in-view is enabled by default in Spring Boot. What does it hide about
+     lazy loading, and why do most teams eventually disable it?"
+
+interviewer_notes: >
+  At-bar = names N+1 with the count arithmetic AND connects long-held connections to
+  pool exhaustion and cross-endpoint impact. Above-bar = knows the double-fetch-join
+  row-multiplication trap, reaches for projections under pagination, refuses the
+  bigger-pool reflex with reasoning. Below-bar = 'add indexes' as the primary fix
+  (indexes do not help here — the queries ARE indexed point lookups), or blames Hikari.
+  The strongest candidates ask what the dashboard actually renders and whether 50
+  entities should ever be loaded at all.
