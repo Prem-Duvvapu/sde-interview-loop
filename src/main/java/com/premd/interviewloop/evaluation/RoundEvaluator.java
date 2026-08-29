@@ -56,12 +56,13 @@ public class RoundEvaluator {
     private final AppSettingsStore settingsStore;
     private final CostLedger costLedger;
     private final ReadinessCalculator readinessCalculator;
+    private final SessionReporter sessionReporter;
 
     public RoundEvaluator(SessionRoundRepository roundRepo, SignalRepository signalRepo,
                           RoundEvaluationRepository evaluationRepo, TranscriptService transcriptService,
                           ModuleRegistry moduleRegistry, ProviderRegistry providerRegistry,
                           AppSettingsStore settingsStore, CostLedger costLedger,
-                          ReadinessCalculator readinessCalculator) {
+                          ReadinessCalculator readinessCalculator, SessionReporter sessionReporter) {
         this.roundRepo = roundRepo;
         this.signalRepo = signalRepo;
         this.evaluationRepo = evaluationRepo;
@@ -71,10 +72,11 @@ public class RoundEvaluator {
         this.settingsStore = settingsStore;
         this.costLedger = costLedger;
         this.readinessCalculator = readinessCalculator;
+        this.sessionReporter = sessionReporter;
     }
 
     public RoundEvaluation evaluate(Long roundId) {
-        SessionRound round = roundRepo.findById(roundId)
+        SessionRound round = roundRepo.findByIdWithSession(roundId)
                 .orElseThrow(() -> new NoSuchElementException("Round not found: " + roundId));
         InterviewerModule module = moduleRegistry.require(round.getModuleType());
         ProviderRegistry.Resolved evaluator = providerRegistry.resolveEvaluator();
@@ -252,9 +254,17 @@ public class RoundEvaluator {
         try {
             String companyProfileId = round.getSession().getCompanyProfileId();
             readinessCalculator.recordSnapshot(
-                    round.getModuleType().getValue(), companyProfileId, mean);
+                    round.getModuleType().getValue(), companyProfileId, mean, evaluation.getComparabilityEpoch());
         } catch (Exception e) {
             log.warn("Round {}: readiness snapshot failed — {}", round.getId(), e.getMessage());
+        }
+
+        // The final evaluation is now persisted. If it completed the session, this is the
+        // first safe moment to aggregate every round into a report.
+        try {
+            sessionReporter.reportIfSessionCompleted(round.getSession().getId());
+        } catch (Exception e) {
+            log.warn("Round {}: session report generation failed — {}", round.getId(), e.getMessage());
         }
 
         return saved;

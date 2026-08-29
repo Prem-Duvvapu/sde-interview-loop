@@ -98,6 +98,39 @@ export interface CreateSessionBody {
   modelId?: string;
 }
 
+// ---------- reports and progress ----------
+
+export interface SessionReport {
+  overallBand: string | null;
+  perModule: Record<string, number>;
+  narrativeMd: string | null;
+}
+
+export interface ReadinessResult {
+  band: string | null;
+  overallScore: number;
+  moduleScores: Record<string, number>;
+  moduleSampleCounts: Record<string, number>;
+  failingMinimums: Record<string, number>;
+  confidence: 'none' | 'low' | 'confident';
+  totalSamples: number;
+  error?: string | null;
+}
+
+export interface TrendPoint {
+  takenAt: string;
+  score: number;
+  sampleSize: number;
+  comparabilityEpoch: number;
+}
+
+export interface TrendResponse {
+  module: string;
+  company: string;
+  comparabilityEpoch: number;
+  points: TrendPoint[];
+}
+
 // ---------- transcript / artifacts ----------
 
 export interface TranscriptTurn {

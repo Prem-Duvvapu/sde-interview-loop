@@ -8,9 +8,14 @@ import type { OutboundFrame, ParsedFrame } from './ws/frames';
 import { SetupView } from './components/SetupView';
 import { InterviewView } from './components/InterviewView';
 import { ReplayView } from './components/ReplayView';
+import { DashboardView } from './components/DashboardView';
 import { SettingsOverlay } from './components/SettingsOverlay';
 
-type View = { kind: 'setup' } | { kind: 'interview' } | { kind: 'replay'; roundId: number };
+type View =
+  | { kind: 'setup' }
+  | { kind: 'interview' }
+  | { kind: 'replay'; roundId: number }
+  | { kind: 'dashboard' };
 
 export function App() {
   const [view, setView] = useState<View>({ kind: 'setup' });
@@ -323,6 +328,7 @@ export function App() {
         <SetupView
           onStart={(opts) => void handleStart(opts)}
           onReplay={(roundId) => setView({ kind: 'replay', roundId })}
+          onOpenDashboard={() => setView({ kind: 'dashboard' })}
           onOpenSettings={() => setSettingsOpen(true)}
           starting={starting}
           startError={startError}
@@ -357,6 +363,14 @@ export function App() {
 
       {view.kind === 'replay' && (
         <ReplayView roundId={view.roundId} onExit={() => setView({ kind: 'setup' })} />
+      )}
+
+      {view.kind === 'dashboard' && (
+        <DashboardView
+          onExit={() => setView({ kind: 'setup' })}
+          onReplay={(roundId) => setView({ kind: 'replay', roundId })}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
       )}
 
       <SettingsOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} />

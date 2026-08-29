@@ -2,13 +2,18 @@ package com.premd.interviewloop.session;
 
 import com.premd.interviewloop.domain.InterviewSession;
 import com.premd.interviewloop.domain.LlmCall;
+import com.premd.interviewloop.domain.ReadinessSnapshot;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.TranscriptTurn;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.RoundPhase;
 import com.premd.interviewloop.domain.enums.TurnRole;
 import com.premd.interviewloop.domain.repository.LlmCallRepository;
+import com.premd.interviewloop.domain.repository.ReadinessSnapshotRepository;
+import com.premd.interviewloop.domain.repository.SessionReportRepository;
 import com.premd.interviewloop.domain.repository.SessionRoundRepository;
+import com.premd.interviewloop.evaluation.EvaluationTools;
+import com.premd.interviewloop.evaluation.RoundEvaluator;
 import com.premd.interviewloop.interviewer.InterviewerTools;
 import com.premd.interviewloop.llm.*;
 import com.premd.interviewloop.transcript.TranscriptService;
@@ -141,6 +146,15 @@ class TurnOrchestratorIntegrationTest {
     private TranscriptService transcriptService;
 
     @Autowired
+    private RoundEvaluator roundEvaluator;
+
+    @Autowired
+    private SessionReportRepository sessionReportRepo;
+
+    @Autowired
+    private ReadinessSnapshotRepository readinessSnapshotRepo;
+
+    @Autowired
     private ProviderKeyStore keyStore;
 
     @Autowired
@@ -271,5 +285,36 @@ class TurnOrchestratorIntegrationTest {
         // (e) Phase transition still succeeded
         SessionRound round = roundRepo.findById(roundId).orElseThrow();
         assertThat(round.getPhase()).isEqualTo(RoundPhase.CLARIFYING);
+    }
+
+    @Test
+    void finalEvaluation_createsSessionReportAndEpochTaggedSnapshot() {
+        InterviewSession session = sessionManager.createSingleModuleSession(
+                "google", ModuleType.DSA, "medium", MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        Long roundId = session.getRounds().get(0).getId();
+
+        turnOrchestrator.beginRound(roundId, TurnSink.noop());
+        sessionManager.completeRound(roundId);
+
+        // The evaluator deliberately uses the same scripted provider. Switching it bumps the
+        // comparability epoch, which the snapshot must preserve permanently.
+        int evaluatorEpoch = settingsStore.setEvaluator(MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        mockProvider.enqueueResponse(List.of(
+                LlmEvent.toolCall(EvaluationTools.SUBMIT_EVALUATION, "call_eval_1", Map.of(
+                        "scores", Map.of("clarification", 4, "correctness", 4),
+                        "strengths", List.of("Asked a relevant clarification question."),
+                        "gaps", List.of("Did not yet discuss edge cases."),
+                        "narrative_md", "A clear start with room to deepen the solution.")),
+                LlmEvent.usage(new LlmEvent.Usage(90, 30, 0, 0)),
+                LlmEvent.done()
+        ));
+
+        roundEvaluator.evaluate(roundId);
+
+        assertThat(sessionReportRepo.findBySessionId(session.getId())).isPresent();
+        List<ReadinessSnapshot> snapshots = readinessSnapshotRepo
+                .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc("google", "dsa");
+        assertThat(snapshots).hasSize(1);
+        assertThat(snapshots.get(0).getComparabilityEpoch()).isEqualTo(evaluatorEpoch);
     }
 }

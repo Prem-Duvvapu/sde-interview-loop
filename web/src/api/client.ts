@@ -6,7 +6,10 @@ import type {
   InterviewSession,
   KeyMutationResult,
   ProviderInfo,
+  ReadinessResult,
   SessionRound,
+  SessionReport,
+  TrendResponse,
   TranscriptTurn,
   VerifyResult,
 } from './types';
@@ -124,6 +127,17 @@ export const startRound = (sessionId: number, roundId: number) =>
 
 export const completeRound = (sessionId: number, roundId: number) =>
   request<SessionRound>(`/api/sessions/${sessionId}/rounds/${roundId}/complete`, { method: 'POST' });
+
+export const getSessionReport = (sessionId: number) =>
+  request<SessionReport>(`/api/sessions/${sessionId}/report`);
+
+export const getReadiness = (companyProfileId: string) =>
+  request<ReadinessResult>(`/api/progress/readiness/${encodeURIComponent(companyProfileId)}`);
+
+export const getTrend = (companyProfileId: string, module: string) =>
+  request<TrendResponse>(
+    `/api/progress/trend?company=${encodeURIComponent(companyProfileId)}&module=${encodeURIComponent(module)}`,
+  );
 
 // ---------- transcript / replay ----------
 

@@ -36,7 +36,9 @@ public class ProgressController {
      */
     @GetMapping("/readiness/{companyProfileId}")
     public ResponseEntity<?> getReadiness(@PathVariable String companyProfileId) {
-        ReadinessCalculator.ReadinessResult result = readinessCalculator.computeReadiness(companyProfileId);
+        int currentEpoch = settingsStore.comparabilityEpoch();
+        ReadinessCalculator.ReadinessResult result = readinessCalculator
+                .computeReadiness(companyProfileId, currentEpoch);
         if (result.error() != null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", result.error()));
@@ -60,15 +62,13 @@ public class ProgressController {
                     .body(Map.of("error", "No snapshots for module=" + module + " company=" + company));
         }
 
-        int currentEpoch = settingsStore.comparabilityEpoch();
-
         List<Map<String, Object>> points = snapshots.stream()
                 .map(s -> {
                     Map<String, Object> point = new LinkedHashMap<>();
                     point.put("takenAt", s.getTakenAt().toString());
                     point.put("score", s.getScore());
                     point.put("sampleSize", s.getSampleSize());
-                    point.put("comparabilityEpoch", currentEpoch);
+                    point.put("comparabilityEpoch", s.getComparabilityEpoch());
                     return point;
                 })
                 .toList();
@@ -76,7 +76,7 @@ public class ProgressController {
         return ResponseEntity.ok(Map.of(
                 "module", module,
                 "company", company,
-                "comparabilityEpoch", currentEpoch,
+                "comparabilityEpoch", settingsStore.comparabilityEpoch(),
                 "points", points
         ));
     }

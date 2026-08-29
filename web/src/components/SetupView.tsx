@@ -12,6 +12,7 @@ interface Props {
     difficultyTarget: string;
   }) => void;
   onReplay: (roundId: number) => void;
+  onOpenDashboard: () => void;
   onOpenSettings: () => void;
   starting: boolean;
   startError: string | null;
@@ -24,7 +25,7 @@ type LoadState =
 
 const DIFFICULTIES = ['easy', 'medium', 'medium-hard', 'hard'];
 
-export function SetupView({ onStart, onReplay, onOpenSettings, starting, startError }: Props) {
+export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, starting, startError }: Props) {
   const [load, setLoad] = useState<LoadState>({ phase: 'loading' });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<SessionModeId>('single_module');
@@ -85,9 +86,14 @@ export function SetupView({ onStart, onReplay, onOpenSettings, starting, startEr
           <h1>SDE Interview Loop</h1>
           <p className="setup-tagline">Company-calibrated mock interviews · SDE-2 backend</p>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={onOpenSettings}>
-          Settings
-        </button>
+        <div className="setup-actions">
+          <button type="button" className="btn btn-ghost" onClick={onOpenDashboard}>
+            Progress
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onOpenSettings}>
+            Settings
+          </button>
+        </div>
       </header>
 
       {load.phase === 'loading' && (

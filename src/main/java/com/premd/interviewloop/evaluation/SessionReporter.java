@@ -8,6 +8,7 @@ import com.premd.interviewloop.domain.SessionReport;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.ReadinessBand;
 import com.premd.interviewloop.domain.enums.RoundStatus;
+import com.premd.interviewloop.domain.enums.SessionStatus;
 import com.premd.interviewloop.domain.repository.RoundEvaluationRepository;
 import com.premd.interviewloop.domain.repository.SessionReportRepository;
 import com.premd.interviewloop.domain.repository.SessionRoundRepository;
@@ -130,6 +131,18 @@ public class SessionReporter {
         SessionReport saved = reportRepo.save(report);
         log.info("Session {} report: band={} modules={}", sessionId, band.wireValue(), perModuleScores.keySet());
         return Optional.of(saved);
+    }
+
+    /**
+     * Evaluation is deliberately outside the round-completion transaction. Generate the
+     * aggregate only after that evaluation has persisted, and only for a completed session.
+     */
+    public Optional<SessionReport> reportIfSessionCompleted(Long sessionId) {
+        InterviewSession session = sessionRepo.findById(sessionId).orElse(null);
+        if (session == null || session.getStatus() != SessionStatus.COMPLETED) {
+            return Optional.empty();
+        }
+        return report(sessionId);
     }
 
     /**

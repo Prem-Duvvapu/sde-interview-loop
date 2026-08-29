@@ -49,21 +49,32 @@ public class ReadinessCalculator {
     /**
      * Record a readiness snapshot after a round evaluation completes.
      */
-    public void recordSnapshot(String moduleType, String companyProfileId, double score) {
+    public void recordSnapshot(String moduleType, String companyProfileId, double score, int comparabilityEpoch) {
         // Count existing snapshots for sample size
         List<ReadinessSnapshot> existing = snapshotRepo
-                .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc(companyProfileId, moduleType);
+                .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc(companyProfileId, moduleType).stream()
+                .filter(snapshot -> snapshot.getComparabilityEpoch() == comparabilityEpoch)
+                .toList();
         int sampleSize = existing.size() + 1;
-        ReadinessSnapshot snapshot = new ReadinessSnapshot(moduleType, companyProfileId, score, sampleSize);
+        ReadinessSnapshot snapshot = new ReadinessSnapshot(
+                moduleType, companyProfileId, score, sampleSize, comparabilityEpoch);
         snapshotRepo.save(snapshot);
-        log.info("Recorded readiness snapshot: module={} company={} score={} sample={}",
-                moduleType, companyProfileId, score, sampleSize);
+        log.info("Recorded readiness snapshot: module={} company={} epoch={} score={} sample={}",
+                moduleType, companyProfileId, comparabilityEpoch, score, sampleSize);
     }
 
     /**
      * Compute current readiness for a company.
      */
     public ReadinessResult computeReadiness(String companyProfileId) {
+        return computeReadiness(companyProfileId, 1);
+    }
+
+    /**
+     * Compute readiness within one evaluator epoch. Scores from prior evaluator bindings are
+     * retained for historical display but are not a compatible input to the current readiness.
+     */
+    public ReadinessResult computeReadiness(String companyProfileId, int comparabilityEpoch) {
         CompanyProfile profile;
         try {
             profile = profileLoader.getProfile(companyProfileId);
@@ -83,7 +94,9 @@ public class ReadinessCalculator {
 
         for (String moduleType : emphasis.keySet()) {
             List<ReadinessSnapshot> snapshots = snapshotRepo
-                    .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc(companyProfileId, moduleType);
+                    .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc(companyProfileId, moduleType).stream()
+                    .filter(snapshot -> snapshot.getComparabilityEpoch() == comparabilityEpoch)
+                    .toList();
             if (snapshots.isEmpty()) {
                 continue;
             }
