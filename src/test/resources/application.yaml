@@ -18,5 +18,5 @@ spring:
     locations: classpath:db/migration
 
 app:
-  profiles-dir: ../company-profiles
-  providers-config: ../config/providers.yaml
+  profiles-dir: company-profiles
+  providers-config: config/providers.yaml

@@ -3,7 +3,9 @@ package com.premd.interviewloop.transport;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.premd.interviewloop.domain.RoundEvaluation;
+import com.premd.interviewloop.domain.SessionReport;
 import com.premd.interviewloop.domain.repository.RoundEvaluationRepository;
+import com.premd.interviewloop.domain.repository.SessionReportRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,15 +14,17 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/rounds")
 public class EvaluationController {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final RoundEvaluationRepository evaluationRepo;
+    private final SessionReportRepository reportRepo;
 
-    public EvaluationController(RoundEvaluationRepository evaluationRepo) {
+    public EvaluationController(RoundEvaluationRepository evaluationRepo,
+                                SessionReportRepository reportRepo) {
         this.evaluationRepo = evaluationRepo;
+        this.reportRepo = reportRepo;
     }
 
     public record EvaluationDto(
@@ -35,12 +39,35 @@ public class EvaluationController {
             String narrativeMd
     ) {}
 
-    @GetMapping("/{roundId}/evaluation")
+    @GetMapping("/api/rounds/{roundId}/evaluation")
     public ResponseEntity<?> getEvaluation(@PathVariable Long roundId) {
         return evaluationRepo.findByRoundId(roundId)
                 .<ResponseEntity<?>>map(e -> ResponseEntity.ok(toDto(e)))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "No evaluation yet for round " + roundId)));
+    }
+
+    // -- Session report --
+
+    public record SessionReportDto(
+            String overallBand,
+            Map<String, Double> perModule,
+            String narrativeMd
+    ) {}
+
+    @GetMapping("/api/sessions/{sessionId}/report")
+    public ResponseEntity<?> getSessionReport(@PathVariable Long sessionId) {
+        return reportRepo.findBySessionId(sessionId)
+                .<ResponseEntity<?>>map(r -> ResponseEntity.ok(toReportDto(r)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "No report yet for session " + sessionId)));
+    }
+
+    private SessionReportDto toReportDto(SessionReport r) {
+        return new SessionReportDto(
+                r.getOverallBand(),
+                readJson(r.getPerModule(), new TypeReference<Map<String, Double>>() {}, Map.of()),
+                r.getNarrativeMd());
     }
 
     private EvaluationDto toDto(RoundEvaluation e) {
@@ -67,3 +94,4 @@ public class EvaluationController {
         }
     }
 }
+

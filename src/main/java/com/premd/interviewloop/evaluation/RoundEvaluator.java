@@ -16,6 +16,7 @@ import com.premd.interviewloop.llm.CostLedger;
 import com.premd.interviewloop.llm.LlmEvent;
 import com.premd.interviewloop.llm.LlmRequest;
 import com.premd.interviewloop.llm.ProviderRegistry;
+import com.premd.interviewloop.progress.ReadinessCalculator;
 import com.premd.interviewloop.transcript.TranscriptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,11 +55,13 @@ public class RoundEvaluator {
     private final ProviderRegistry providerRegistry;
     private final AppSettingsStore settingsStore;
     private final CostLedger costLedger;
+    private final ReadinessCalculator readinessCalculator;
 
     public RoundEvaluator(SessionRoundRepository roundRepo, SignalRepository signalRepo,
                           RoundEvaluationRepository evaluationRepo, TranscriptService transcriptService,
                           ModuleRegistry moduleRegistry, ProviderRegistry providerRegistry,
-                          AppSettingsStore settingsStore, CostLedger costLedger) {
+                          AppSettingsStore settingsStore, CostLedger costLedger,
+                          ReadinessCalculator readinessCalculator) {
         this.roundRepo = roundRepo;
         this.signalRepo = signalRepo;
         this.evaluationRepo = evaluationRepo;
@@ -67,6 +70,7 @@ public class RoundEvaluator {
         this.providerRegistry = providerRegistry;
         this.settingsStore = settingsStore;
         this.costLedger = costLedger;
+        this.readinessCalculator = readinessCalculator;
     }
 
     public RoundEvaluation evaluate(Long roundId) {
@@ -243,6 +247,16 @@ public class RoundEvaluator {
 
         RoundEvaluation saved = evaluationRepo.save(evaluation);
         log.info("Round {} evaluated: band={} mean={}", round.getId(), band.wireValue(), String.format("%.2f", mean));
+
+        // Best-effort: record a readiness snapshot for trend tracking.
+        try {
+            String companyProfileId = round.getSession().getCompanyProfileId();
+            readinessCalculator.recordSnapshot(
+                    round.getModuleType().getValue(), companyProfileId, mean);
+        } catch (Exception e) {
+            log.warn("Round {}: readiness snapshot failed — {}", round.getId(), e.getMessage());
+        }
+
         return saved;
     }
 

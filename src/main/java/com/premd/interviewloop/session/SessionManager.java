@@ -5,6 +5,7 @@ import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.*;
 import com.premd.interviewloop.domain.repository.InterviewSessionRepository;
 import com.premd.interviewloop.domain.repository.SessionRoundRepository;
+import com.premd.interviewloop.evaluation.SessionReporter;
 import com.premd.interviewloop.profile.CompanyProfile;
 import com.premd.interviewloop.profile.ProfileLoader;
 import org.slf4j.Logger;
@@ -28,15 +29,18 @@ public class SessionManager {
     private final SessionRoundRepository roundRepo;
     private final ProfileLoader profileLoader;
     private final SessionStateMachine stateMachine;
+    private final SessionReporter sessionReporter;
 
     public SessionManager(InterviewSessionRepository sessionRepo,
                           SessionRoundRepository roundRepo,
                           ProfileLoader profileLoader,
-                          SessionStateMachine stateMachine) {
+                          SessionStateMachine stateMachine,
+                          SessionReporter sessionReporter) {
         this.sessionRepo = sessionRepo;
         this.roundRepo = roundRepo;
         this.profileLoader = profileLoader;
         this.stateMachine = stateMachine;
+        this.sessionReporter = sessionReporter;
     }
 
     /**
@@ -206,6 +210,14 @@ public class SessionManager {
             session.setEndedAt(Instant.now());
             sessionRepo.save(session);
             log.info("Session {} auto-completed — all rounds done", sessionId);
+
+            // Best-effort: generate the session report. A failure here must not undo
+            // session completion — the round is already COMPLETED regardless.
+            try {
+                sessionReporter.report(sessionId);
+            } catch (Exception e) {
+                log.warn("Session {}: report generation failed — {}", sessionId, e.getMessage());
+            }
         }
     }
 }

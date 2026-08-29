@@ -94,8 +94,10 @@ providers:
                                     # from Anthropic breakpoints. The adapter owns this.
       vision: true
     pricing_usd_per_mtok:
-      input: <set-me>               # fill from Google's pricing page for your tier
-      output: <set-me>
+      # Checked 2026-08-29 — introductory pricing through Dec 31, 2026 (Google AI for Developers).
+      # Standard prices double on Jan 1, 2027 ($1.50 input, $7.50 output).
+      input: 0.75
+      output: 3.75
 
   - id: deepseek
     display_name: DeepSeek
