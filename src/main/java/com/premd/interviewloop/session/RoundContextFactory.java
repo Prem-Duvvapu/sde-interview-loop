@@ -50,6 +50,7 @@ public class RoundContextFactory {
                 .companyProfileId(profileId)
                 .difficultyTarget(round.getDifficultyTarget())
                 .plannedDurationSec(round.getPlannedDurationSec())
+                .carryOverBrief(round.getCarryOverBrief())
                 .phase(round.getPhase())
                 .hintLevel(hintLevel)
                 .elapsedSec(elapsedSec(round));

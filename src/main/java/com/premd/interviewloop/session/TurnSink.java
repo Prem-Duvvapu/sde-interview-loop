@@ -1,7 +1,9 @@
 package com.premd.interviewloop.session;
 
+import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.RoundPhase;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,6 +26,12 @@ public interface TurnSink {
 
     /** The round ended. */
     void roundCompleted(Long roundId);
+
+    /**
+     * The next enabled full-loop round has a private panel handoff and may now be started.
+     * Defaulted so non-WebSocket sinks keep working as the protocol gains this capability.
+     */
+    default void nextRoundReady(SessionRound nextRound, List<SessionRound> skippedRounds) {}
 
     /** Token usage and estimated cost for the turn. */
     void usage(int inputTokens, int outputTokens, int cacheReadTokens, double costUsd);

@@ -302,9 +302,22 @@ public class TurnOrchestrator {
                     // Best-effort: the round is already COMPLETED regardless of whether this
                     // succeeds, so a failure here must not surface as a refused control call.
                     try {
-                        roundEvaluator.evaluate(roundId);
+                        var evaluation = roundEvaluator.evaluate(roundId);
+                        sessionManager.prepareNextRound(roundId, evaluation)
+                                .ifPresent(advance -> sink.nextRoundReady(
+                                        advance.nextRound(), advance.skippedRounds()));
                     } catch (Exception evalError) {
                         log.warn("Round {}: evaluation failed — {}", roundId, evalError.getMessage());
+                        // A failed evaluator cannot be allowed to trap the candidate midway
+                        // through a full loop. The next interviewer receives a neutral handoff.
+                        try {
+                            sessionManager.prepareNextRound(roundId, null)
+                                    .ifPresent(advance -> sink.nextRoundReady(
+                                            advance.nextRound(), advance.skippedRounds()));
+                        } catch (Exception advanceError) {
+                            log.warn("Round {}: could not prepare next full-loop round — {}",
+                                    roundId, advanceError.getMessage());
+                        }
                     }
 
                 } else if (call instanceof ControlCall.Malformed m) {

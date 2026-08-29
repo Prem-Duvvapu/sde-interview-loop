@@ -1,6 +1,7 @@
 package com.premd.interviewloop.transport;
 
 import com.premd.interviewloop.domain.InterviewSession;
+import com.premd.interviewloop.domain.RoundEvaluation;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.SessionMode;
@@ -73,9 +74,15 @@ public class SessionController {
         // Evaluation is best-effort and must never undo a completion that already happened —
         // the round stays COMPLETED even if the evaluator fails or times out.
         try {
-            roundEvaluator.evaluate(roundId);
+            RoundEvaluation evaluation = roundEvaluator.evaluate(roundId);
+            sessionManager.prepareNextRound(roundId, evaluation);
         } catch (Exception e) {
             log.warn("Evaluation failed for round {}: {}", roundId, e.getMessage());
+            try {
+                sessionManager.prepareNextRound(roundId, null);
+            } catch (Exception advanceError) {
+                log.warn("Could not prepare next full-loop round after {}: {}", roundId, advanceError.getMessage());
+            }
         }
         return round;
     }

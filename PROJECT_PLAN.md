@@ -1,8 +1,8 @@
 # sde-interview-loop — Project Plan
 
-**Status:** approved and in active development. Phases 1–5 complete, Phase 7 partial.
+**Status:** approved and in active development. Phases 1–5 complete; Phase 6 and Phase 7 are implemented through their core user flows and are being hardened.
 **Target:** SDE-2 backend, ~2 years experience, India product companies.
-**Plan last updated:** 2026-08-24
+**Plan last updated:** 2026-08-29
 
 > This document is the source of truth for **architecture, data model, and roadmap**.
 > For what is actually built right now, the invariants that break silently, and how to
@@ -24,8 +24,8 @@ interviewer against a real LLM, and scored into a report when it ends.
 | 3 | LLD module | **done** |
 | 4 | HLD module + design graph surface | **done** |
 | 5 | CS fundamentals + Java deep-dive modules | **done** |
-| 6 | Company-calibrated full loop (round chaining) | **not started** |
-| 7 | Evaluation, reports, dashboard, replay | **partial** — per-round evaluation done; rollups/dashboard not |
+| 6 | Company-calibrated full loop (round chaining) | **implemented** — ordered rounds, evaluator handoff, disabled-round notices, responsive transition UI |
+| 7 | Evaluation, reports, dashboard, replay | **implemented** — per-round evaluation, session reports, readiness rollups/trends, dashboard and replay entry points |
 | 8 | Voice mode | not started |
 | 9 | Polish and hardening | not started |
 
@@ -118,6 +118,73 @@ Boot jar and a Vite dev server — both of which run natively with `mvn spring-b
 on a 16GB box. Compose remains a nice-to-have for packaging, not a prerequisite; enable
 Docker Desktop's WSL integration for this distro only if you want it.
 
+### 1.1a Current component architecture
+
+```mermaid
+flowchart TB
+  subgraph Browser[Browser — React 19 / Vite]
+    Setup[Setup + settings]
+    Live[Live interview\nchat · work surface · timer]
+    Dashboard[Dashboard\nreports · trends · replay links]
+    Replay[Transcript replay]
+    Setup --> Live
+    Setup --> Dashboard
+    Dashboard --> Replay
+  end
+
+  REST[REST /api\nprofiles · sessions · reports · progress · transcripts]
+  WS[WebSocket /ws/interview\nstart_round · candidate_turn · streamed frames]
+  Browser --> REST
+  Browser <--> WS
+
+  subgraph Server[Spring Boot]
+    Transport[transport\ncontrollers · frame codec · WS handler]
+    Session[session\nSessionManager · state machine\nTurnOrchestrator · RoundContextFactory]
+    Modules[interviewer\nDSA · LLD · HLD · CSF · Java]
+    LLM[llm\nprovider registry · settings/key stores\nprompt assembly · adapters · cost ledger]
+    Evaluation[evaluation\nround evaluator · session reporter]
+    Supporting[profile · content · transcript · progress]
+    Transport --> Session
+    Session --> Modules
+    Session --> LLM
+    Session --> Supporting
+    Session --> Evaluation
+    Evaluation --> Supporting
+  end
+
+  REST --> Transport
+  WS --> Transport
+  LLM <--> Providers[BYO-key provider APIs\nGemini default · Claude alternative]
+  Supporting <--> H2[(H2 file database\nportable Flyway schema)]
+  Evaluation <--> H2
+  Session <--> H2
+```
+
+### 1.1b Package ownership and persistence boundaries
+
+```mermaid
+flowchart LR
+  Transport[transport] --> Session[session]
+  Transport --> Progress[progress]
+  Session --> Interviewer[interviewer]
+  Session --> Transcript[transcript]
+  Session --> Evaluation[evaluation]
+  Session --> LLM[llm]
+  Interviewer --> Content[content]
+  Session --> Profile[profile]
+  Evaluation --> Profile
+  Progress --> Domain[domain + repositories]
+  Transcript --> Domain
+  Evaluation --> Domain
+  Session --> Domain
+  LLM --> Domain
+  Domain --> DB[(H2 / future MySQL)]
+```
+
+`RoundContextFactory` is the intentional transaction boundary: it reads the lazy domain
+graph and returns a detached `RoundContext`; provider streaming then runs without holding
+a database connection. Entities with lazy parent links never cross the JSON boundary.
+
 ### 1.2 The core idea: the interviewer is a state machine, not a chatbot
 
 A free-form chat with a system prompt will drift. It forgets to ask about complexity,
@@ -164,6 +231,56 @@ original plan did not anticipate, both now load-bearing:
   trains models to stop after a tool call and await a function response; these control
   tools never send one, so the candidate would experience silence. The orchestrator
   detects this and retries once with tools withheld.
+
+### 1.3a Live-round sequence
+
+```mermaid
+sequenceDiagram
+  participant C as React client
+  participant W as WebSocket handler
+  participant O as TurnOrchestrator
+  participant S as Session state machine
+  participant P as LLM provider
+  participant D as H2 persistence
+
+  C->>W: candidate_turn(text, artifact)
+  W-->>C: turn_ack
+  W->>O: handleCandidateTurn
+  O->>D: persist candidate turn + artifact
+  O->>O: build detached context; assemble stable → volatile prompt
+  O->>P: stream request
+  loop streamed interviewer response
+    P-->>O: text delta / tool call / usage
+    O-->>C: text_delta / tool_call
+  end
+  O->>D: persist interviewer prose
+  O->>S: validate requested phase/hint/end controls
+  S->>D: persist accepted state only
+  alt tool calls without spoken words
+    O->>P: one continuation request, tools withheld
+    P-->>O: spoken continuation
+  end
+  O->>D: record cost ledger
+  O-->>C: usage + turn_complete
+```
+
+### 1.3b Full-loop advancement and readiness flow
+
+```mermaid
+flowchart TD
+  End[Round completes] --> Eval[RoundEvaluator\npinned evaluator + rubric]
+  Eval --> Persist[Persist evaluation\nscores · strengths · gaps]
+  Persist --> Snapshot[Record epoch-tagged\nreadiness snapshot]
+  Persist --> Last{Last enabled round?}
+  Last -- no --> Handoff[Build compact private handoff\nno transcript carry-over]
+  Handoff --> Next[Mark next ordered round ready]
+  Next --> Notice[WebSocket next_round_ready\nincluding skipped ordinal notices]
+  Notice --> UI[Responsive UI resets work surface\nstarts next round on same connection]
+  Last -- yes --> Complete[Complete session]
+  Complete --> Report[SessionReporter\naggregate evaluated rounds]
+  Report --> Dashboard[Dashboard\nreport · readiness · comparable trends]
+  Snapshot --> Dashboard
+```
 
 ### 1.4 Prompt assembly and caching
 
@@ -248,12 +365,12 @@ Package-by-feature under `com.premd.interviewloop`:
 | Package | Responsibility | Depends on | State |
 |---|---|---|---|
 | `transport` | WS + REST controllers, frame codec | session | built |
-| `session` | Round/session state machine, turn orchestration | interviewer, profile, transcript | built (no full-loop chaining) |
+| `session` | Round/session state machine, ordered full-loop advancement, turn orchestration | interviewer, profile, transcript, evaluation | built |
 | `interviewer` | `InterviewerModule` SPI + control tools + 5 implementations | llm, content | built |
 | `llm` | Provider SPI + adapters, key/settings stores, prompt assembly, cost ledger | — | built |
 | `content` | Question banks, one subpackage per module (file-backed) | — | built |
 | `evaluation` | Rubric scoring of a completed round | llm, interviewer | built |
-| `progress` | Readiness rollup, trends, company readiness | evaluation, profile | **not built** |
+| `progress` | Epoch-aware readiness rollup, trends, company readiness | evaluation, profile | built |
 | `transcript` | Turn + artifact persistence, replay | — | built |
 | `profile` | Profile loading, schema validation | — | built |
 | `domain` | JPA entities, enums, repositories | — | built |
@@ -447,24 +564,19 @@ the first tests into the repo.
 
 ### Remaining work
 
-**Phase 6 — Company-calibrated full loop.** *Not started, and the largest remaining gap.*
-`SessionManager.createSession` already creates one `session_round` per profile round for a
-`full_loop` session and marks `enabled_in_v1: false` rounds as `SKIPPED`. What is missing
-is everything that makes it a *loop*: carry-over briefs between rounds (a few hundred
-tokens of what was covered — §1.4 explicitly calls for a fresh context per round rather
-than one accumulating 4-hour transcript), difficulty-curve application, break handling,
-and automatic advance from one completed round to the next.
+**Phase 6 — Company-calibrated full loop.** *Core flow implemented.* Full-loop sessions
+create profile-ordered rounds with their explicit difficulty targets; disabled v1 rounds
+remain `SKIPPED`. Completion evaluates the round, creates a compact private strengths/gaps
+handoff for the next enabled interviewer, and emits a `next_round_ready` WebSocket event.
+The client resets its work surface and begins the next round on the same connection. The
+remaining product work is break/resume policy and live-provider confirmation of an entire
+multi-round loop without burning excessive quota.
 
-**Phase 7 — Evaluation, reports, dashboard, replay.** *Partial.* Per-round rubric scoring
-is built and verified (`evaluation/RoundEvaluator`, §3). Still missing:
-- **Session-level reports.** The `session_report` table is mapped but nothing writes to it.
-- **Readiness rollups and the trend dashboard.** `readiness_snapshot` is mapped but nothing
-  writes to it, and there is no `progress` package. This is where the `emphasis`-weighted,
-  recency-decayed company readiness described in §3 would live.
-- **Anti-inflation anchoring.** Rubric text is fixed and the evaluator is separated from
-  the interviewer, but there are no anchored few-shot examples at each band.
-- **Replay UI.** Backend transcript/artifact endpoints exist; `ReplayView.tsx` exists but
-  is unverified.
+**Phase 7 — Evaluation, reports, dashboard, replay.** *Core flow implemented.* Per-round
+evaluation writes session reports once the final evaluation exists; readiness snapshots and
+trend points retain their comparability epoch; the dashboard presents report, history,
+module scores and trends, and links into replay. Remaining hardening: anchored examples to
+reduce evaluator inflation and a browser-based replay/dashboard walkthrough.
 
 **Phase 8 — Voice mode.** Not started. Mirrors the LLM layer: a `VoiceProvider` SPI with a
 zero-key browser-native default and optional key-based upgrades. See **DM-1**.
@@ -473,11 +585,9 @@ zero-key browser-native default and optional key-based upgrades. See **DM-1**.
 warning threshold — see D-7), graceful API failure handling mid-round, session recovery
 after a disconnect, packaged single-command startup.
 
-**Testing debt, cutting across everything.** 38 tests exist, all covering question-bank
-loading and module prompt text. There is **no integration test** — nothing starts Spring,
-hits an endpoint, or exercises `TurnOrchestrator`. Given how much of this system's
-correctness lives in orchestration (control-call refusal, the silent-turn retry, streaming
-outside transactions), that is the highest-value testing gap.
+**Testing debt, cutting across everything.** The test suite now includes a Spring-backed,
+scripted-provider integration test for orchestration, silent-turn repair, evaluation/report
+creation, and full-loop handoff. Endpoint/browser integration coverage is still missing.
 
 ### What the parallelisation plan was for
 
@@ -494,8 +604,8 @@ separate rubrics, one SPI frozen at the end of Phase 1 — and that held up: all
 without renegotiating the interface, and the one capability that had to be added
 (`artifactLabel()`) went in as a `default` method without touching the others.
 
-**That parallelism is now spent.** Phases 6, 7, and 9 are sequential and share
-`session`/`evaluation` code; running them concurrently would mostly produce conflicts.
+**That parallelism is now spent.** The next work is Phase 9 hardening and measured provider
+validation.
 
 ---
 
@@ -648,11 +758,10 @@ thing only the owner can do, and it needs no code change.
 every `cost_estimate_usd` currently computes as 0 and the cost ledger — a first-class
 concern in this design — is recording nothing useful. Prerequisite for D-7.
 
-**5. Then the roadmap:** Phase 6 (full-loop chaining) is the largest functional gap; the
-rest of Phase 7 (session reports, readiness rollups, dashboard) is what turns individual
-rounds into the progress tracking this project exists for.
+**5. Then harden the completed core flows:** test a full loop and dashboard in a browser,
+then add recovery, cost ceilings and packaged startup from Phase 9.
 
-**Testing debt is worth paying down alongside any of the above.** There is no integration
-test at all — see §4.
+**Testing debt is worth paying down alongside any of the above.** Endpoint/browser
+integration coverage is still absent — see §4.
 
 D-6, D-7 and D-9 remain open and none of them block the work above.

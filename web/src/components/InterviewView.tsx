@@ -15,6 +15,7 @@ import { StatusBar } from './StatusBar';
 interface Props {
   profile: CompanyProfile | null;
   round: SessionRound;
+  roundCount: number;
   moduleType: ModuleTypeId;
   phase: string;
   roundComplete: boolean;
@@ -38,6 +39,7 @@ export function InterviewView(props: Props) {
   const {
     profile,
     round,
+    roundCount,
     moduleType,
     phase,
     roundComplete,
@@ -94,7 +96,7 @@ export function InterviewView(props: Props) {
           <span className="topbar-secondary">
             {MODULE_LABELS[moduleType]}
             {round.difficultyTarget ? ` · ${round.difficultyTarget}` : ''}
-            {` · round #${round.id}`}
+            {` · round ${round.ordinal}${roundCount > 1 ? ` of ${roundCount}` : ''}`}
           </span>
         </div>
 

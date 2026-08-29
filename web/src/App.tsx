@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { completeRound, createSession, describeError, startRound } from './api/client';
+import { completeRound, createSession, describeError, getSession, startRound } from './api/client';
 import type { CompanyProfile, InterviewSession, ModuleTypeId, SessionModeId, SessionRound } from './api/types';
 import { EMPTY_USAGE, nextId, type ChatItem, type UsageTotals } from './lib/chat';
 import { defaultLanguageFor, isModuleType } from './lib/phases';
@@ -42,9 +42,11 @@ export function App() {
   /** The editor buffer. A ref on purpose — keystrokes must not re-render the transcript. */
   const bufferRef = useRef('');
   const roundIdRef = useRef<number | null>(null);
+  const sessionIdRef = useRef<number | null>(null);
   const startSentForRoundRef = useRef<number | null>(null);
   /** Assigned once the socket hook has run; lets callbacks defined above it send frames. */
   const sendRef = useRef<((frame: OutboundFrame) => boolean) | null>(null);
+  const beginNextRoundRef = useRef<((next: SessionRound, skippedRoundOrdinals?: number[]) => Promise<void>) | null>(null);
   const reportedUnknownFramesRef = useRef<Set<string>>(new Set());
 
   const pushItem = useCallback((item: ChatItem) => setItems((prev) => [...prev, item]), []);
@@ -135,6 +137,14 @@ export function App() {
           pushSystem('Round complete.', 'info');
           break;
 
+        case 'next_round_ready':
+          if (!frame.round) {
+            pushSystem('The next round was prepared, but its details were unreadable. Return to Sessions and resume it there.', 'warn');
+            break;
+          }
+          void beginNextRoundRef.current?.(frame.round, frame.skippedRoundOrdinals);
+          break;
+
         case 'usage':
           setUsage((prev) => ({
             inputTokens: prev.inputTokens + frame.inputTokens,
@@ -208,6 +218,50 @@ export function App() {
     startSentForRoundRef.current = null;
   }, []);
 
+  const beginNextRound = useCallback(
+    async (next: SessionRound, skippedRoundOrdinals: number[] = []) => {
+      const sessionId = sessionIdRef.current;
+      if (sessionId === null) return;
+
+      let opened = next;
+      try {
+        opened = (await startRound(sessionId, next.id)) ?? next;
+      } catch (err: unknown) {
+        pushSystem(`Could not start the next round: ${describeError(err)}`, 'warn');
+        return;
+      }
+
+      if (!isModuleType(opened.moduleType)) {
+        pushSystem('The next round uses a module this client does not recognise.', 'warn');
+        return;
+      }
+
+      setRound(opened);
+      setModuleType(opened.moduleType);
+      roundIdRef.current = opened.id;
+      resetRoundState(opened.moduleType, opened.phase && opened.phase !== 'PENDING' ? opened.phase : 'BRIEFING');
+      setSession((previous) => previous
+        ? {
+            ...previous,
+            rounds: (previous.rounds ?? []).map((candidate) => (candidate.id === opened.id ? opened : candidate)),
+          }
+        : previous);
+
+      const sent = sendRef.current?.({ type: 'start_round', roundId: opened.id }) ?? false;
+      if (sent) startSentForRoundRef.current = opened.id;
+
+      window.setTimeout(() => {
+        if (skippedRoundOrdinals.length > 0) {
+          pushSystem(`Skipped profile round${skippedRoundOrdinals.length === 1 ? '' : 's'} ${skippedRoundOrdinals.join(', ')} because ${skippedRoundOrdinals.length === 1 ? 'it is' : 'they are'} disabled in this version.`, 'info');
+        }
+        pushSystem(`Starting round ${opened.ordinal}.`, 'info');
+        if (!sent) pushSystem('Connecting to the next interviewer…', 'info');
+      }, 0);
+    },
+    [pushSystem, resetRoundState],
+  );
+  beginNextRoundRef.current = beginNextRound;
+
   const handleStart = useCallback(
     async (opts: {
       profile: CompanyProfile;
@@ -227,7 +281,9 @@ export function App() {
 
         const rounds = created?.rounds ?? [];
         const target =
-          rounds.find((r) => r.moduleType === opts.moduleType && r.status !== 'COMPLETED') ?? rounds[0];
+          (opts.mode === 'full_loop' ? rounds.find((r) => r.status === 'PENDING') : undefined)
+          ?? rounds.find((r) => r.moduleType === opts.moduleType && r.status !== 'COMPLETED')
+          ?? rounds[0];
         if (!target) {
           throw new Error('The backend created a session with no rounds.');
         }
@@ -248,6 +304,7 @@ export function App() {
 
         setProfile(opts.profile);
         setSession(created);
+        sessionIdRef.current = created.id;
         setRound(opened);
         setModuleType(resolvedModule);
         roundIdRef.current = opened.id;
@@ -303,13 +360,25 @@ export function App() {
       const updated = await completeRound(session.id, current.id);
       if (updated) setRound(updated);
       pushSystem('Round marked complete.', 'info');
+      if (session.mode === 'FULL_LOOP') {
+        const refreshed = await getSession(session.id);
+        setSession(refreshed);
+        const next = (refreshed.rounds ?? []).find((candidate) => candidate.status === 'PENDING');
+        if (next) {
+          const skipped = (refreshed.rounds ?? [])
+            .filter((candidate) => candidate.ordinal > current.ordinal && candidate.ordinal < next.ordinal && candidate.status === 'SKIPPED')
+            .map((candidate) => candidate.ordinal);
+          await beginNextRound(next, skipped);
+        }
+      }
     } catch (err: unknown) {
       pushSystem(`Could not mark the round complete: ${describeError(err)}`, 'warn');
     }
-  }, [round, session, pushSystem]);
+  }, [round, session, pushSystem, beginNextRound]);
 
   const handleExit = useCallback(() => {
     roundIdRef.current = null;
+    sessionIdRef.current = null;
     startSentForRoundRef.current = null;
     setRound(null);
     setSession(null);
@@ -339,6 +408,7 @@ export function App() {
         <InterviewView
           profile={profile}
           round={round}
+          roundCount={session?.rounds?.length ?? 1}
           moduleType={moduleType}
           phase={phase}
           roundComplete={roundComplete}

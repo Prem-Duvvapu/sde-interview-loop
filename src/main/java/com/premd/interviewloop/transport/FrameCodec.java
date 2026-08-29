@@ -2,9 +2,11 @@ package com.premd.interviewloop.transport;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.premd.interviewloop.domain.SessionRound;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -56,6 +58,13 @@ public class FrameCodec {
         return encode("round_completed", Map.of("roundId", roundId));
     }
 
+    public String nextRoundReady(SessionRound round, List<SessionRound> skippedRounds) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("round", roundPayload(round));
+        data.put("skippedRoundOrdinals", skippedRounds.stream().map(SessionRound::getOrdinal).toList());
+        return encode("next_round_ready", data);
+    }
+
     public String usage(int inputTokens, int outputTokens, int cacheReadTokens, double costUsd) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("inputTokens", inputTokens);
@@ -74,5 +83,19 @@ public class FrameCodec {
         } catch (JsonProcessingException e) {
             return "{\"type\":\"error\",\"message\":\"Frame encoding failed\"}";
         }
+    }
+
+    private Map<String, Object> roundPayload(SessionRound round) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", round.getId());
+        data.put("ordinal", round.getOrdinal());
+        data.put("moduleType", round.getModuleType().getValue());
+        data.put("phase", round.getPhase().name());
+        data.put("status", round.getStatus().name());
+        data.put("difficultyTarget", round.getDifficultyTarget());
+        data.put("plannedDurationSec", round.getPlannedDurationSec());
+        data.put("interviewerProvider", round.getInterviewerProvider());
+        data.put("interviewerModel", round.getInterviewerModel());
+        return data;
     }
 }

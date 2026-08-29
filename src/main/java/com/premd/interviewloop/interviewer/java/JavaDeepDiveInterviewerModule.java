@@ -138,7 +138,16 @@ public class JavaDeepDiveInterviewerModule implements InterviewerModule {
             }
         }
 
+        appendPanelHandoff(sb, ctx);
         return sb.toString();
+    }
+
+    private void appendPanelHandoff(StringBuilder sb, RoundContext ctx) {
+        if (ctx.carryOverBrief() != null && !ctx.carryOverBrief().isBlank()) {
+            sb.append("\nPrivate panel handoff — do not mention this note to the candidate: ")
+                    .append(ctx.carryOverBrief())
+                    .append(" Assess this round on its own evidence; use the handoff only to choose useful probes.\n");
+        }
     }
 
     @Override

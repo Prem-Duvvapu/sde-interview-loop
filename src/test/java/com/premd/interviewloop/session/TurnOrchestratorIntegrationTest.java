@@ -3,10 +3,13 @@ package com.premd.interviewloop.session;
 import com.premd.interviewloop.domain.InterviewSession;
 import com.premd.interviewloop.domain.LlmCall;
 import com.premd.interviewloop.domain.ReadinessSnapshot;
+import com.premd.interviewloop.domain.RoundEvaluation;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.TranscriptTurn;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.RoundPhase;
+import com.premd.interviewloop.domain.enums.RoundStatus;
+import com.premd.interviewloop.domain.enums.SessionMode;
 import com.premd.interviewloop.domain.enums.TurnRole;
 import com.premd.interviewloop.domain.repository.LlmCallRepository;
 import com.premd.interviewloop.domain.repository.ReadinessSnapshotRepository;
@@ -15,6 +18,8 @@ import com.premd.interviewloop.domain.repository.SessionRoundRepository;
 import com.premd.interviewloop.evaluation.EvaluationTools;
 import com.premd.interviewloop.evaluation.RoundEvaluator;
 import com.premd.interviewloop.interviewer.InterviewerTools;
+import com.premd.interviewloop.interviewer.ModuleRegistry;
+import com.premd.interviewloop.interviewer.RoundContext;
 import com.premd.interviewloop.llm.*;
 import com.premd.interviewloop.transcript.TranscriptService;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +36,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration test for the turn loop (Task T3 in docs/TASKS.md).
@@ -147,6 +153,12 @@ class TurnOrchestratorIntegrationTest {
 
     @Autowired
     private RoundEvaluator roundEvaluator;
+
+    @Autowired
+    private RoundContextFactory contextFactory;
+
+    @Autowired
+    private ModuleRegistry moduleRegistry;
 
     @Autowired
     private SessionReportRepository sessionReportRepo;
@@ -316,5 +328,45 @@ class TurnOrchestratorIntegrationTest {
                 .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc("google", "dsa");
         assertThat(snapshots).hasSize(1);
         assertThat(snapshots.get(0).getComparabilityEpoch()).isEqualTo(evaluatorEpoch);
+    }
+
+    @Test
+    void fullLoop_preparesOnlyTheNextRoundWithPrivateStableHandoff() {
+        InterviewSession session = sessionManager.createSession(
+                "google", SessionMode.FULL_LOOP, MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        List<SessionRound> rounds = roundRepo.findBySessionIdOrderByOrdinalAsc(session.getId());
+        SessionRound first = rounds.get(0);
+        SessionRound second = rounds.get(1);
+
+        // The profile's explicit curve is retained, and a stale client cannot skip over round 1.
+        assertThat(first.getDifficultyTarget()).isEqualTo("medium-hard");
+        assertThat(second.getDifficultyTarget()).isEqualTo("hard");
+        assertThatThrownBy(() -> sessionManager.startRound(second.getId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("preceding round");
+
+        sessionManager.startRound(first.getId());
+        sessionManager.completeRound(first.getId());
+
+        RoundEvaluation evaluation = new RoundEvaluation(first);
+        evaluation.setStrengths("[\"Structured the approach clearly\"]");
+        evaluation.setGaps("[\"Did not test boundary cases\"]");
+        SessionManager.RoundAdvance advance = sessionManager.prepareNextRound(first.getId(), evaluation).orElseThrow();
+
+        assertThat(advance.nextRound().getId()).isEqualTo(second.getId());
+        assertThat(advance.skippedRounds()).isEmpty();
+        SessionRound prepared = roundRepo.findById(second.getId()).orElseThrow();
+        assertThat(prepared.getStatus()).isEqualTo(RoundStatus.PENDING);
+        assertThat(prepared.getCarryOverBrief())
+                .contains("Structured the approach clearly")
+                .contains("Did not test boundary cases");
+
+        RoundContext nextContext = contextFactory.build(second.getId(), 0);
+        assertThat(moduleRegistry.require(second.getModuleType()).persona(nextContext))
+                .contains("Private panel handoff")
+                .contains("do not mention this note to the candidate");
+
+        SessionRound started = sessionManager.startRound(second.getId());
+        assertThat(started.getStatus()).isEqualTo(RoundStatus.IN_PROGRESS);
     }
 }

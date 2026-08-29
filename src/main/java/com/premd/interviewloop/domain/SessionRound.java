@@ -1,6 +1,7 @@
 package com.premd.interviewloop.domain;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.RoundPhase;
 import com.premd.interviewloop.domain.enums.RoundStatus;
@@ -57,6 +58,11 @@ public class SessionRound {
     @Column(name = "actual_duration_sec")
     private Integer actualDurationSec;
 
+    /** Private evaluator handoff for the next interviewer in a full interview loop. */
+    @Lob
+    @Column(name = "carry_over_brief")
+    private String carryOverBrief;
+
     @Column(name = "started_at")
     private Instant startedAt;
 
@@ -111,6 +117,14 @@ public class SessionRound {
 
     public Integer getActualDurationSec() { return actualDurationSec; }
     public void setActualDurationSec(Integer actualDurationSec) { this.actualDurationSec = actualDurationSec; }
+
+    /**
+     * Deliberately hidden from REST entity serialisation: this is interviewer-only context, not
+     * candidate feedback. The next module receives it through the detached RoundContext.
+     */
+    @JsonIgnore
+    public String getCarryOverBrief() { return carryOverBrief; }
+    public void setCarryOverBrief(String carryOverBrief) { this.carryOverBrief = carryOverBrief; }
 
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }

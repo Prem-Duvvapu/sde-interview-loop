@@ -42,7 +42,7 @@ LLM, scores it against a rubric, and tracks readiness over time.
 
 ---
 
-## Current state (updated 2026-08-24)
+## Current state (updated 2026-08-29)
 
 **Working and verified end-to-end.** You can start a round in the browser, be interviewed
 by an AI, and get a scored report at the end.
@@ -63,18 +63,14 @@ by an AI, and get a scored report at the end.
 
 These are the real remaining gaps. Do not assume anything below exists.
 
-- **Full-loop round chaining (Phase 6).** `SessionManager.createSession` creates all
-  rounds for a `full_loop` session, but nothing chains them — no carry-over brief between
-  rounds, no difficulty curve application, no automatic advance to the next round.
-- **Readiness dashboard / trends (rest of Phase 7).** `session_report` and
-  `readiness_snapshot` tables exist and are mapped, but **nothing writes to them**. There
-  is no `progress` package. Per-round evaluation works; cross-round rollup does not.
-- **Transcript replay UI.** Backend endpoints exist (`GET /api/rounds/{id}/transcript`,
-  `/artifacts`); a `ReplayView.tsx` exists in the web client but is not verified working.
+- **Browser walkthrough of the whole flow.** Full-loop chaining now passes a compact,
+  private evaluator handoff to the next ordered round and the dashboard/replay have entry
+  points, but the complete responsive browser flow is still awaiting manual validation.
 - **Voice mode (Phase 8).** Nothing built. See DM-1 in `PROJECT_PLAN.md`.
 - **Cost ceilings, mid-round failure recovery, packaged startup (Phase 9).** Nothing built.
-- **No integration tests.** No test starts Spring, hits an endpoint, or exercises
-  `TurnOrchestrator`. The 38 existing tests cover question banks and module prompt text.
+- **Endpoint/browser integration tests.** A Spring-backed scripted-provider integration test
+  now exercises `TurnOrchestrator`, silent-turn repair, reports and full-loop handoff; no
+  test yet drives REST/WS through a browser client.
 - **`mvn validate` profile-validation binding.** Planned in Phase 1, never added. Profile
   validation happens at application startup instead (fail-fast in `ProfileLoader`).
 
@@ -226,7 +222,8 @@ Package-by-feature under `com.premd.interviewloop`:
 | `profile` | Company profile loading and schema validation |
 | `domain` | JPA entities, enums, repositories |
 
-**No `progress` package exists yet** — that is the unbuilt readiness-rollup work.
+`progress` owns epoch-aware readiness rollups and trends; its dashboard UI is in
+`web/src/components/DashboardView.tsx`.
 
 ### The files you will most likely need
 
@@ -246,7 +243,7 @@ Root package prefix: `src/main/java/com/premd/interviewloop/`
 | `llm/ProviderRegistry.java` | Resolves interviewer/evaluator provider + model. |
 | `llm/ProviderKeyStore.java` | API keys (UI-supplied in memory, else env). |
 | `llm/AppSettingsStore.java` | Interviewer/evaluator bindings + comparability epoch. |
-| `llm/CostLedger.java` | Writes `llm_call` rows. Cost is currently 0 — see `docs/TASKS.md` T1. |
+| `llm/CostLedger.java` | Writes `llm_call` rows from provider pricing in `config/providers.yaml`. |
 | `evaluation/RoundEvaluator.java` | Scores a completed round. |
 | `content/<module>/…Bank.java` | Loads and validates that module's question YAML at boot. |
 | `transport/…Controller.java` | REST endpoints. |

@@ -1,6 +1,7 @@
 package com.premd.interviewloop.transport;
 
 import com.premd.interviewloop.domain.enums.RoundPhase;
+import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.session.TurnSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +49,11 @@ public class WebSocketTurnSink implements TurnSink {
     @Override
     public void roundCompleted(Long roundId) {
         send(codec.roundCompleted(roundId));
+    }
+
+    @Override
+    public void nextRoundReady(SessionRound nextRound, List<SessionRound> skippedRounds) {
+        send(codec.nextRoundReady(nextRound, skippedRounds));
     }
 
     @Override

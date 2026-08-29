@@ -37,6 +37,8 @@ public final class RoundContext {
     private final Integer plannedDurationSec;
     private final String questionSlug;
     private final String questionContentHash;
+    /** Private, stable handoff from the prior completed round in a full loop. */
+    private final String carryOverBrief;
 
     // Volatile — must stay out of the cached prefix
     private final RoundPhase phase;
@@ -60,6 +62,7 @@ public final class RoundContext {
         this.plannedDurationSec = b.plannedDurationSec;
         this.questionSlug = b.questionSlug;
         this.questionContentHash = b.questionContentHash;
+        this.carryOverBrief = b.carryOverBrief;
         this.phase = b.phase;
         this.hintLevel = b.hintLevel;
         this.elapsedSec = b.elapsedSec;
@@ -96,6 +99,12 @@ public final class RoundContext {
     /** Hash of the statement as it was when selected, for interpreting past rounds after edits. */
     public String questionContentHash() { return questionContentHash; }
 
+    /**
+     * Evaluator-generated panel handoff for this round, or null for the first/single round.
+     * It is stable within the round and therefore safe in the cacheable prompt prefix.
+     */
+    public String carryOverBrief() { return carryOverBrief; }
+
     public RoundPhase phase() { return phase; }
 
     /** 0 = no help given. Rises only when the backend honours a set_hint_level call. */
@@ -127,6 +136,7 @@ public final class RoundContext {
         private Integer plannedDurationSec;
         private String questionSlug;
         private String questionContentHash;
+        private String carryOverBrief;
         private RoundPhase phase = RoundPhase.BRIEFING;
         private int hintLevel;
         private int elapsedSec;
@@ -147,6 +157,7 @@ public final class RoundContext {
         public Builder plannedDurationSec(Integer v) { this.plannedDurationSec = v; return this; }
         public Builder questionSlug(String v) { this.questionSlug = v; return this; }
         public Builder questionContentHash(String v) { this.questionContentHash = v; return this; }
+        public Builder carryOverBrief(String v) { this.carryOverBrief = v; return this; }
         public Builder phase(RoundPhase v) { this.phase = v; return this; }
         public Builder hintLevel(int v) { this.hintLevel = v; return this; }
         public Builder elapsedSec(int v) { this.elapsedSec = v; return this; }

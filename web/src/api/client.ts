@@ -122,6 +122,8 @@ export const createSession = (body: CreateSessionBody) =>
 
 export const listSessions = () => request<InterviewSession[]>('/api/sessions');
 
+export const getSession = (sessionId: number) => request<InterviewSession>(`/api/sessions/${sessionId}`);
+
 export const startRound = (sessionId: number, roundId: number) =>
   request<SessionRound>(`/api/sessions/${sessionId}/rounds/${roundId}/start`, { method: 'POST' });
 

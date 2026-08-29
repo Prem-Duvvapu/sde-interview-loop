@@ -1,3 +1,5 @@
+import type { SessionRound } from '../api/types';
+
 /**
  * Frame protocol for /ws/interview.
  *
@@ -57,6 +59,11 @@ export interface RoundCompletedFrame {
   type: 'round_completed';
   roundId: number | null;
 }
+export interface NextRoundReadyFrame {
+  type: 'next_round_ready';
+  round: SessionRound | null;
+  skippedRoundOrdinals: number[];
+}
 export interface UsageFrame {
   type: 'usage';
   inputTokens: number;
@@ -75,6 +82,7 @@ export type KnownFrame =
   | TurnCompleteFrame
   | RoundStartedFrame
   | RoundCompletedFrame
+  | NextRoundReadyFrame
   | UsageFrame;
 
 export type ParsedFrame =
@@ -89,6 +97,24 @@ const num = (v: unknown, fallback = 0): number => (typeof v === 'number' && Numb
 const optNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+const sessionRound = (v: unknown): SessionRound | null => {
+  const rec = obj(v);
+  const id = optNum(rec.id);
+  const ordinal = optNum(rec.ordinal);
+  const moduleType = str(rec.moduleType);
+  if (id === null || ordinal === null || !moduleType) return null;
+  return {
+    id,
+    ordinal,
+    moduleType: moduleType as SessionRound['moduleType'],
+    phase: str(rec.phase, 'PENDING'),
+    status: str(rec.status, 'PENDING') as SessionRound['status'],
+    difficultyTarget: typeof rec.difficultyTarget === 'string' ? rec.difficultyTarget : null,
+    plannedDurationSec: optNum(rec.plannedDurationSec),
+    interviewerProvider: typeof rec.interviewerProvider === 'string' ? rec.interviewerProvider : null,
+    interviewerModel: typeof rec.interviewerModel === 'string' ? rec.interviewerModel : null,
+  };
+};
 
 /**
  * Never throws. An unrecognised or malformed frame is reported, not fatal —
@@ -136,6 +162,17 @@ export function parseFrame(payload: string): ParsedFrame {
       return { kind: 'known', frame: { type: 'round_started', roundId: optNum(rec.roundId) } };
     case 'round_completed':
       return { kind: 'known', frame: { type: 'round_completed', roundId: optNum(rec.roundId) } };
+    case 'next_round_ready':
+      return {
+        kind: 'known',
+        frame: {
+          type: 'next_round_ready',
+          round: sessionRound(rec.round),
+          skippedRoundOrdinals: Array.isArray(rec.skippedRoundOrdinals)
+            ? rec.skippedRoundOrdinals.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+            : [],
+        },
+      };
     case 'usage':
       return {
         kind: 'known',

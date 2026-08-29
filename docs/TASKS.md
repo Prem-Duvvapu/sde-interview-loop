@@ -8,23 +8,24 @@ which files, concrete steps, and how to know you are done.
 **Pick one task. Finish it. Verify it. Commit it.** Do not start three at once — the
 invariants in `AGENTS.md` make half-finished work in this codebase risky.
 
+> **Status note (2026-08-29):** T1 and T3–T6 are complete. Their detailed cards remain
+> below as implementation history; select from the remaining-work table instead.
+
 **Before starting any task**, confirm you are on a green build:
 
 ```bash
 git status && git log --oneline -5     # has someone else worked here since?
-./mvnw -o test                          # expect: Tests run: 38, Failures: 0
+./mvnw -o test                          # expect: Tests run: 53, Failures: 0
 ```
 
 | # | Task | Size | Needs a live LLM call? |
 |---|---|---|---|
-| T1 | Fill in real provider pricing | XS | no |
-| T2 | Find out why prompt caching is not working | M | yes (a few) |
-| T3 | First integration test for the turn loop | M | no (mock the provider) |
-| T4 | Session report at end of a session | M | yes (1–2) |
-| T5 | Readiness rollup + trend API | L | no |
-| T6 | Full-loop round chaining (Phase 6) | L | yes (several) |
-| T7 | Provider parity check | S | yes (2 rounds) |
-| T8 | Grow the question banks | S each | no |
+| H1 | Browser walkthrough: responsive setup, dashboard, replay and a full-loop transition | M | one controlled round / loop |
+| H2 | Measure and document Gemini prompt-cache behaviour | M | a few |
+| H3 | Provider parity check | S | two controlled rounds |
+| H4 | Cost ceilings, disconnect recovery and packaged startup | L | no for core work |
+| H5 | Anchored evaluator examples to reduce score inflation | M | calibration calls |
+| H6 | Grow original question banks and validate profiles from first-hand data | S each | no |
 
 > **Quota warning.** The owner's Gemini free tier is **20 requests/day per model**. A
 > single full round can use 10+. Prefer T1/T3/T5/T8 (no live calls) when quota is spent.

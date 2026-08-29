@@ -22,8 +22,8 @@ Chosen deliberately:
 
 The cost of YAML is whitespace sensitivity and a weaker type story. Both are mitigated:
 `_schema.json` is a JSON Schema applied to the parsed YAML, validated at application
-startup (fail-fast, with the offending file and line reported) and via
-`./gradlew validateProfiles` without booting the app.
+startup (fail-fast, with the offending file and line reported). For standalone validation,
+use the scratch-venv command in `AGENTS.md`.
 
 ## Trust level
 

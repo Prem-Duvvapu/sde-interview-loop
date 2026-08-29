@@ -33,6 +33,72 @@ You can also add or switch API keys from the settings UI at runtime — no resta
 
 ---
 
+## Architecture at a glance
+
+```mermaid
+flowchart TB
+  subgraph Browser[Browser — React + Vite]
+    Setup[Setup and settings]
+    Live[Live interview\nchat · editor/diagram · timer]
+    Dash[Dashboard\nreports · trends · replay links]
+    Setup --> Live
+    Setup --> Dash
+  end
+
+  REST[REST API\nsetup · history · reports · progress]
+  WS[WebSocket\ninterview turns and streamed frames]
+  Browser --> REST
+  Browser <--> WS
+
+  subgraph App[Spring Boot]
+    Transport[transport]
+    Session[session\nstate machine · orchestration]
+    Modules[interviewer modules\nDSA · LLD · HLD · CSF · Java]
+    LLM[llm\nproviders · prompt assembly · cost ledger]
+    Eval[evaluation + progress]
+    Transport --> Session
+    Session --> Modules
+    Session --> LLM
+    Session --> Eval
+  end
+
+  REST --> Transport
+  WS --> Transport
+  LLM <--> Providers[Your provider keys\nGemini default · Claude alternative]
+  Session <--> DB[(Embedded H2\nFlyway schema)]
+  Eval <--> DB
+```
+
+### Interview and full-loop flow
+
+```mermaid
+sequenceDiagram
+  participant You as Browser
+  participant WS as WebSocket handler
+  participant Loop as TurnOrchestrator
+  participant AI as Interviewer provider
+  participant DB as H2
+
+  You->>WS: candidate turn + current work surface
+  WS->>Loop: handle turn
+  Loop->>DB: persist transcript/artifact
+  Loop->>AI: cache-stable prompt, then stream
+  AI-->>You: interviewer text + control calls
+  Loop->>DB: persist prose, signals and cost
+  Loop->>Loop: accept/refuse state changes
+  alt round ends
+    Loop->>DB: persist evaluation and readiness snapshot
+    Loop-->>You: round_completed
+    Loop-->>You: next_round_ready (if another enabled round exists)
+    You->>WS: start next round on the same connection
+  end
+```
+
+The detailed package map, prompt-caching rules, and data-flow diagrams are in
+[`PROJECT_PLAN.md`](PROJECT_PLAN.md).
+
+---
+
 ## What a round looks like
 
 1. **Pick a company and a round type.** 11 company profiles ship with the repo, each with
@@ -85,11 +151,12 @@ and requires explicit confirmation.
 
 ## Project status
 
-**Working end to end.** All five interviewer modules, per-round evaluation, runtime
-provider/key switching, and the web client are built and verified.
+**Working end to end.** All five interviewer modules, ordered full-loop transitions,
+per-round evaluation, session reports, readiness trends/dashboard, runtime provider/key
+switching, and the web client are built.
 
-**Not built yet:** full-loop round chaining (running a company's whole loop back to back),
-readiness dashboard and trends, voice mode, cost ceilings.
+**Still to harden:** browser-based full-loop walkthrough, prompt-cache measurement,
+disconnect recovery, cost ceilings, packaged startup, and voice mode.
 
 The company profiles are all `seeded-unverified` — plausible defaults generated at setup,
 not facts. Treat their round structures and difficulty bars as a starting point to correct
@@ -131,12 +198,15 @@ POST   /api/profiles/reload                             hot-reload profiles from
 POST   /api/sessions                                    create a session (+ its rounds)
 GET    /api/sessions                                    list sessions
 GET    /api/sessions/{id}                               session with rounds
+GET    /api/sessions/{id}/report                        completed-session report
 POST   /api/sessions/{sid}/rounds/{rid}/start           begin a round
 POST   /api/sessions/{sid}/rounds/{rid}/complete        end a round (triggers evaluation)
 DELETE /api/sessions/{id}                               abandon a session
 GET    /api/rounds/{id}/transcript                      full transcript
 GET    /api/rounds/{id}/artifacts                       artifact snapshots (for replay)
 GET    /api/rounds/{id}/evaluation                      scored report
+GET    /api/progress/readiness/{company}                current comparable readiness
+GET    /api/progress/trend?company={id}&module={type}   epoch-tagged module trend
 GET    /api/providers                                   providers, capabilities, key status
 PUT    /api/providers/{id}/key                          set an API key at runtime
 DELETE /api/providers/{id}/key                          clear a UI-supplied key
@@ -156,7 +226,7 @@ never sent to the browser.
 ## Development
 
 ```bash
-./mvnw test              # 38 tests
+./mvnw test              # 53 tests
 ./mvnw -o compile        # offline build, faster once deps are cached
 cd web && npx tsc --noEmit   # frontend typecheck
 ```

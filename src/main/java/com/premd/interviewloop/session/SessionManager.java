@@ -1,6 +1,9 @@
 package com.premd.interviewloop.session;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.premd.interviewloop.domain.InterviewSession;
+import com.premd.interviewloop.domain.RoundEvaluation;
 import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.*;
 import com.premd.interviewloop.domain.repository.InterviewSessionRepository;
@@ -13,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 /**
  * Manages interview session lifecycle: creation, round management, and completion.
@@ -28,15 +33,18 @@ public class SessionManager {
     private final SessionRoundRepository roundRepo;
     private final ProfileLoader profileLoader;
     private final SessionStateMachine stateMachine;
+    private final ObjectMapper objectMapper;
 
     public SessionManager(InterviewSessionRepository sessionRepo,
                           SessionRoundRepository roundRepo,
                           ProfileLoader profileLoader,
-                          SessionStateMachine stateMachine) {
+                          SessionStateMachine stateMachine,
+                          ObjectMapper objectMapper) {
         this.sessionRepo = sessionRepo;
         this.roundRepo = roundRepo;
         this.profileLoader = profileLoader;
         this.stateMachine = stateMachine;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -114,6 +122,18 @@ public class SessionManager {
         SessionRound round = roundRepo.findById(roundId)
                 .orElseThrow(() -> new NoSuchElementException("Round not found: " + roundId));
 
+        // A full loop has one active interviewer at a time. Keeping this guard server-side means
+        // a stale browser tab cannot skip ahead and invalidate the planned difficulty sequence.
+        int roundOrdinal = round.getOrdinal();
+        boolean earlierRoundOutstanding = roundRepo.findBySessionIdOrderByOrdinalAsc(round.getSession().getId())
+                .stream()
+                .anyMatch(candidate -> candidate.getOrdinal() < roundOrdinal
+                        && candidate.getStatus() != RoundStatus.COMPLETED
+                        && candidate.getStatus() != RoundStatus.SKIPPED);
+        if (earlierRoundOutstanding) {
+            throw new IllegalStateException("Complete the preceding round before starting this one");
+        }
+
         stateMachine.validateRoundTransition(round, RoundStatus.IN_PROGRESS);
 
         round.setStatus(RoundStatus.IN_PROGRESS);
@@ -123,6 +143,43 @@ public class SessionManager {
         round = roundRepo.save(round);
         log.info("Started round {} ({})", roundId, round.getModuleType());
         return round;
+    }
+
+    /**
+     * Makes the next enabled round ready after an evaluation is available. The handoff is a small
+     * private panel note, not a transcript: each interviewer still assesses their own round.
+     * Evaluation failure deliberately does not strand a full loop; the next interviewer simply
+     * receives no prior-round conclusions.
+     */
+    @Transactional
+    public Optional<RoundAdvance> prepareNextRound(Long completedRoundId, RoundEvaluation evaluation) {
+        SessionRound completed = roundRepo.findByIdWithSession(completedRoundId)
+                .orElseThrow(() -> new NoSuchElementException("Round not found: " + completedRoundId));
+        InterviewSession session = completed.getSession();
+        if (session.getMode() != SessionMode.FULL_LOOP) {
+            return Optional.empty();
+        }
+
+        List<SessionRound> rounds = roundRepo.findBySessionIdOrderByOrdinalAsc(session.getId());
+        SessionRound next = rounds.stream()
+                .filter(candidate -> candidate.getOrdinal() > completed.getOrdinal())
+                .filter(candidate -> candidate.getStatus() == RoundStatus.PENDING)
+                .findFirst()
+                .orElse(null);
+        if (next == null) {
+            return Optional.empty();
+        }
+
+        next.setCarryOverBrief(handoff(completed, evaluation));
+        roundRepo.save(next);
+
+        List<SessionRound> skipped = rounds.stream()
+                .filter(candidate -> candidate.getOrdinal() > completed.getOrdinal())
+                .filter(candidate -> candidate.getOrdinal() < next.getOrdinal())
+                .filter(candidate -> candidate.getStatus() == RoundStatus.SKIPPED)
+                .toList();
+        log.info("Prepared full-loop round {} after completed round {}", next.getId(), completedRoundId);
+        return Optional.of(new RoundAdvance(next, skipped));
     }
 
     /**
@@ -193,6 +250,48 @@ public class SessionManager {
     public List<InterviewSession> listSessions() {
         return sessionRepo.findAllWithRoundsByOrderByStartedAtDesc();
     }
+
+    private String handoff(SessionRound completed, RoundEvaluation evaluation) {
+        if (evaluation == null) {
+            return "No evaluator handoff was available from the prior round. Assess this round independently.";
+        }
+        List<String> strengths = readBriefItems(evaluation.getStrengths());
+        List<String> gaps = readBriefItems(evaluation.getGaps());
+        StringBuilder brief = new StringBuilder("Prior round ")
+                .append(completed.getOrdinal()).append(" (").append(completed.getModuleType().getValue())
+                .append(") was completed.");
+        if (!strengths.isEmpty()) {
+            brief.append(" Strengths observed: ").append(String.join("; ", strengths)).append(".");
+        }
+        if (!gaps.isEmpty()) {
+            brief.append(" Areas to probe further: ").append(String.join("; ", gaps)).append(".");
+        }
+        if (strengths.isEmpty() && gaps.isEmpty()) {
+            brief.append(" No specific conclusions were recorded; assess this round independently.");
+        }
+        return brief.toString();
+    }
+
+    private List<String> readBriefItems(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            List<String> values = objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            List<String> trimmed = new ArrayList<>();
+            for (String value : values) {
+                if (value != null && !value.isBlank()) {
+                    String normalised = value.replaceAll("\\s+", " ").trim();
+                    trimmed.add(normalised.substring(0, Math.min(220, normalised.length())));
+                }
+                if (trimmed.size() == 2) break;
+            }
+            return trimmed;
+        } catch (Exception e) {
+            log.warn("Could not read evaluator handoff items: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    public record RoundAdvance(SessionRound nextRound, List<SessionRound> skippedRounds) {}
 
     private void checkSessionCompletion(Long sessionId) {
         InterviewSession session = sessionRepo.findById(sessionId).orElse(null);
