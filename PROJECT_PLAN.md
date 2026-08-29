@@ -1,23 +1,58 @@
 # sde-interview-loop — Project Plan
 
-**Status:** awaiting approval. No application code has been written.
+**Status:** approved and in active development. Phases 1–5 complete, Phase 7 partial.
 **Target:** SDE-2 backend, ~2 years experience, India product companies.
-**Last updated:** 2026-08-22
+**Plan last updated:** 2026-08-24
+
+> This document is the source of truth for **architecture, data model, and roadmap**.
+> For what is actually built right now, the invariants that break silently, and how to
+> work in this repo, read **`CLAUDE.md` first** — it is written for an agent picking the
+> project up cold.
 
 ---
 
-## 0. What already exists
+## 0. Where the project actually stands
 
-Two directories of *data*, not code — safe to land before approval, and editable
-without touching any source file:
+**The app works end to end.** A round can be started in the browser, conducted by an AI
+interviewer against a real LLM, and scored into a report when it ends.
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 | Spike | skipped — folded into Phase 1, measured live instead of as throwaway code |
+| 1 | Foundations: domain, persistence, WS transport, LLM SPI, prompt assembly, cost ledger | **done** |
+| 2 | DSA module | **done** |
+| 3 | LLD module | **done** |
+| 4 | HLD module + design graph surface | **done** |
+| 5 | CS fundamentals + Java deep-dive modules | **done** |
+| 6 | Company-calibrated full loop (round chaining) | **not started** |
+| 7 | Evaluation, reports, dashboard, replay | **partial** — per-round evaluation done; rollups/dashboard not |
+| 8 | Voice mode | not started |
+| 9 | Polish and hardening | not started |
+
+Beyond the plan as originally written, two things were added that it did not anticipate:
+
+- **Runtime provider switching and UI-supplied API keys.** Adapters were originally
+  startup-time beans built from env vars, which meant a key pasted after boot could never
+  be used. Now `ProviderFactory` builds a client per call from `ProviderKeyStore`, and
+  `AppSettingsStore` holds the interviewer/evaluator bindings, both changeable from the
+  settings UI without a restart. Changing the evaluator requires explicit confirmation
+  because it starts a new comparability epoch (§1.5).
+- **A silent-turn safety net.** See `CLAUDE.md` — models pause after tool calls waiting
+  for a function response that this app never sends, so a turn could reach the candidate
+  as literal silence. Handled in both prompt text and `TurnOrchestrator`.
+
+### Data that already existed before any code
 
 - **`company-profiles/`** — 11 profiles, a JSON Schema, and a README. All validate
-  clean. All carry `calibration.confidence: seeded-unverified`, so start correcting them
-  today; nothing below blocks that.
+  clean. All still carry `calibration.confidence: seeded-unverified` — correcting them
+  from real interview data remains the highest-value thing the owner can do, and nothing
+  blocks it.
 - **`config/providers.yaml`** — the multi-provider LLM and voice configuration from
-  DM-5/DM-1. Claude is filled in and enabled; OpenAI, Gemini, and DeepSeek are stubbed
-  with `<set-me>` model IDs and flip on when their key appears. Model IDs are left blank
-  rather than guessed, since vendor IDs change often and a wrong one fails at runtime.
+  DM-5/DM-1. Gemini and Claude have working adapters; OpenAI and DeepSeek remain stubbed
+  with `<set-me>` model IDs and no adapter. Model IDs are left blank rather than guessed,
+  since vendor IDs change often and a wrong one fails at runtime.
+- **`question-bank/`** — added during Phases 2–5. All content is original prose written
+  for this project (see D-5, now resolved).
 
 **Level calibration.** Everything is pitched at the SDE-2 bar. Three entries in the
 seed table named levels above SDE-2 and have been retargeted, with a `LEVEL NOTE` in
@@ -39,30 +74,31 @@ profile demands `strong-hire`, which would be a senior-loop expectation.
 
 ### 1.1 Shape
 
-A single-user, locally-hosted, three-container system. No auth, no tenancy, no cloud
+A single-user, locally-hosted, two-process system. No auth, no tenancy, no cloud
 deployment. The design constraint that matters most is not scale — it is **your laptop's
 16GB** and **your LLM API bill**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser (React 19 + Vite)                                      │
-│  chat pane │ Monaco editor │ diagram surface │ report/dashboard │
+│  chat pane │ Monaco editor │ diagram canvas │ report/settings   │
 └────────────┬──────────────────────────────┬─────────────────────┘
              │ WebSocket (interview turns)  │ REST (setup, history, reports)
 ┌────────────▼──────────────────────────────▼─────────────────────┐
-│  Spring Boot 3.x                                                │
+│  Spring Boot 3.4                                                │
 │                                                                 │
 │  transport ──► session (state machine) ──► interviewer modules  │
-│                     │                          │                │
+│                     │                       dsa lld hld csf java│
 │                     │                          ▼                │
 │                     │                    llm (provider SPI)     │
-│                     │                     · adapters: claude,   │
-│                     │                       openai, gemini, …   │
+│                     │                     · adapters: gemini,   │
+│                     │                       claude              │
+│                     │                     · key + settings store│
 │                     │                     · prompt assembly     │
 │                     │                     · streaming           │
 │                     │                     · cost ledger         │
 │                     ▼                                           │
-│              transcript · evaluation · progress · profile       │
+│         transcript · evaluation · content · profile             │
 └────────────┬────────────────────────────────────────────────────┘
              │ JDBC (portable SQL — no vendor-specific types)
       ┌──────▼───────┐
@@ -108,7 +144,7 @@ Per candidate turn:
 1. Client sends a turn over WebSocket: chat text, plus the current editor buffer or
    diagram graph if they changed since the last turn.
 2. Backend assembles the request in **cache-stable order** (§1.4).
-3. Claude call, streamed token-by-token back over the same socket.
+3. Provider call (Gemini by default), streamed token-by-token back over the same socket.
 4. Model returns prose **and** tool calls: `record_signal`, `advance_phase`,
    `set_hint_level`, `end_round`.
 5. Backend persists the turn, applies or rejects the control calls, updates round state.
@@ -117,6 +153,17 @@ Structured control via tool use — rather than parsing prose — is what makes 
 evaluation incremental. Signals accrue during the round, so the end-of-round report is a
 cheap summarisation of already-collected evidence rather than a second full pass over
 the transcript.
+
+Implemented in `session/TurnOrchestrator`. Two things learned in implementation that the
+original plan did not anticipate, both now load-bearing:
+
+- **Streaming runs outside any transaction.** A slow provider must not hold a database
+  connection for the length of a model response, so `RoundContextFactory` materialises a
+  detached `RoundContext` inside a read-only transaction first.
+- **A turn with tool calls but no prose has to be repaired.** Function-calling protocol
+  trains models to stop after a tool call and await a function response; these control
+  tools never send one, so the candidate would experience silence. The orchestrator
+  detects this and retries once with tools withheld.
 
 ### 1.4 Prompt assembly and caching
 
@@ -198,21 +245,50 @@ change in your scores is never mistaken for a step change in your ability.
 
 Package-by-feature under `com.premd.interviewloop`:
 
-| Package | Responsibility | Depends on |
-|---|---|---|
-| `transport` | WS + REST controllers, frame codec | session |
-| `session` | Round/session state machine, full-loop chaining | interviewer, profile, transcript |
-| `interviewer` | `InterviewerModule` SPI + 5 implementations | llm, content, evaluation |
-| `llm` | Provider SPI + adapters, prompt assembly, cache policy, cost ledger | — |
-| `content` | Question bank, prompt templates, rubrics (file-backed) | — |
-| `evaluation` | Signal aggregation, rubric scoring, report generation | llm |
-| `progress` | Readiness rollup, trends, company readiness | evaluation, profile |
-| `transcript` | Turn + artifact persistence, replay | — |
-| `profile` | Profile loading, schema validation, hot reload | — |
+| Package | Responsibility | Depends on | State |
+|---|---|---|---|
+| `transport` | WS + REST controllers, frame codec | session | built |
+| `session` | Round/session state machine, turn orchestration | interviewer, profile, transcript | built (no full-loop chaining) |
+| `interviewer` | `InterviewerModule` SPI + control tools + 5 implementations | llm, content | built |
+| `llm` | Provider SPI + adapters, key/settings stores, prompt assembly, cost ledger | — | built |
+| `content` | Question banks, one subpackage per module (file-backed) | — | built |
+| `evaluation` | Rubric scoring of a completed round | llm, interviewer | built |
+| `progress` | Readiness rollup, trends, company readiness | evaluation, profile | **not built** |
+| `transcript` | Turn + artifact persistence, replay | — | built |
+| `profile` | Profile loading, schema validation | — | built |
+| `domain` | JPA entities, enums, repositories | — | built |
 
-The important boundary is `interviewer`: every module implements one SPI
-(`buildSystemPrompt`, `phases`, `handleTurn`, `finalize`), so adding a module is additive
-and full-loop mode does not need to know which module it is running.
+The important boundary is `interviewer`. The SPI as actually frozen is:
+
+```java
+public interface InterviewerModule {
+    ModuleType moduleType();
+    QuestionSelection selectQuestion(RoundContext ctx);
+    String rubric();                          // stable, identical every round at a rubricVersion
+    String rubricVersion();
+    String persona(RoundContext ctx);         // stable; includes verbatim company quirk behaviours
+    String problemBlock(RoundContext ctx);    // stable; last block before the cache breakpoint
+    String phaseDirective(RoundContext ctx);  // VOLATILE; goes after the breakpoint
+    String openingBrief(RoundContext ctx);
+    default List<LlmRequest.Tool> tools();    // the standard four control tools
+    default ArtifactKind artifactKind();      // CODE | DIAGRAM | SCRATCH
+    default String artifactLanguage();
+    default String artifactLabel();           // how the artifact is announced in the prompt
+    default int maxResponseTokens();
+}
+```
+
+**The method split is not cosmetic — it mirrors the cache-stable prompt layout in §1.4.**
+Everything from `tools()` through `problemBlock()` is the cached prefix; `phaseDirective()`
+is volatile and lands after the breakpoint. Folding phase or timing data into `persona()`
+or `problemBlock()` destroys caching silently.
+
+**The SPI is frozen.** All five modules implement it. New capabilities go in as `default`
+methods (that is how `artifactLabel()` was added in Phase 4) — a new abstract method would
+break all five at once.
+
+Adding a module is purely additive: a question bank directory, a loader in `content/`, and
+a `@Component` implementing the SPI. `ModuleRegistry` discovers it as a Spring bean.
 
 ---
 
@@ -277,10 +353,10 @@ llm_call                        -- cost + latency observability, per provider
 
 Two deliberate choices:
 
-- **Questions and rubrics live in files, not tables.** `question-bank/` and `rubrics/`
-  are version-controlled YAML/Markdown. Rounds store `question_slug` +
-  `question_content_hash`, so a report always records which version of a question you
-  actually faced, even after you edit it. Same pattern as `company-profiles/`.
+- **Questions live in files, not tables.** `question-bank/<module>/` is version-controlled
+  YAML. Rounds store `question_slug` + `question_content_hash`, so a report always records
+  which version of a question you actually faced, even after you edit it. Same pattern as
+  `company-profiles/`. (Rubrics ended up in module code rather than files — see §3.)
 - **`transcript_turn` and `artifact_snapshot` are append-only.** Replay works by
   re-playing events, and an edited transcript is worthless as an evaluation record.
 - **Repository access via Spring Data JPA**, so the storage swap stays a configuration
@@ -296,19 +372,31 @@ this project and it cannot be managed if it is not measured per round.
 **Scale:** 1–5 per dimension. **Bands:** `no-hire (<2.5) · lean-hire (2.5–3.4) ·
 hire (3.5–4.2) · strong-hire (>4.2)`.
 
-Dimensions per module (versioned in `rubrics/`, so a scoring change does not silently
-invalidate old sessions):
+Rubrics live in each module's `rubric()` method, versioned via `rubricVersion()` — not in
+a separate `rubrics/` directory as originally planned. Keeping the rubric text next to the
+persona and phase directives that must agree with it turned out to matter more than
+file-backing it, and `round_evaluation.rubric_version` still records which version scored
+any given round.
 
-- **DSA** — clarification, approach & optimality, correctness, complexity analysis, edge
-  cases, communication, response to pushback
-- **LLD** — requirement extraction, class model, SOLID adherence, extensibility,
-  concurrency handling, code quality
-- **HLD** — requirements & scoping, capacity estimation, component design, trade-off
-  reasoning, bottleneck identification, depth on probe
-- **CS fundamentals** — breadth, depth-on-probe, precision of language, honesty at the
-  knowledge boundary
-- **Java deep-dive** — API fluency, internals depth, concurrency correctness, framework
-  trade-off reasoning, scenario diagnosis
+**The dimension strings below are a live contract, not documentation.** The model passes
+them verbatim to `record_signal`, they are stored in `signal.rubric_dimension`, and
+`RoundEvaluator` scores against them. Renaming one without bumping `rubricVersion()`
+silently corrupts score comparability. Tests pin them deliberately.
+
+| Module | Version | Dimensions |
+|---|---|---|
+| DSA | `dsa-v1` | `clarification`, `approach_optimality`, `correctness`, `complexity_analysis`, `edge_cases`, `communication`, `response_to_pushback` |
+| LLD | `lld-v1` | `requirement_extraction`, `class_model`, `solid_adherence`, `extensibility`, `concurrency_handling`, `code_quality` |
+| HLD | `hld-v1` | `requirements_scoping`, `capacity_estimation`, `component_design`, `trade_off_reasoning`, `bottleneck_identification`, `depth_on_probe` |
+| CS fundamentals | `csf-v1` | `breadth`, `depth_on_probe`, `precision_of_language`, `honesty_at_boundary` |
+| Java deep-dive | `java-v1` | `api_fluency`, `internals_depth`, `concurrency_correctness`, `framework_trade_offs`, `scenario_diagnosis` |
+
+**Per-round evaluation is built** (`evaluation/RoundEvaluator`): after a round completes it
+hands the pinned evaluator the signals accrued during the round plus the transcript, and
+requires a structured `submit_evaluation` tool call back — a prose reply is discarded and
+retried once, since an unstructured evaluation is unusable rather than merely untidy. The
+readiness band is computed server-side from the mean score against the thresholds above,
+not taken as a separate model judgement that could contradict its own numbers.
 
 **Company readiness** = `emphasis`-weighted mean of module scores, recency-weighted
 (older sessions decay), gated by `readiness.module_minimums` — one module below its floor
@@ -325,89 +413,89 @@ that makes the absolute numbers trustworthy — the *trend* is the trustworthy p
 
 ## 4. Phased roadmap
 
-Each phase: its own branch and git worktree, a scoped plan, a review checkpoint before
-merge. No large unreviewed diffs.
+### Completed phases — what actually shipped
 
-### Phase 0 — Spike (throwaway)
-**Goal: answer the three questions that could invalidate the whole design.**
-One hardcoded DSA question, Monaco, WebSocket streaming, Claude, no database.
+**Phase 0 (spike) was skipped.** Its questions were answered against the real Phase 1
+implementation instead of throwaway code. Two of the four exit criteria are still
+genuinely unanswered and are worth closing at some point: there is **no cache-hit
+measurement** (nothing has verified `cache_read_tokens` is non-zero by the third turn),
+and **no provider-parity run** (the same round has never been run through Gemini and
+Claude to compare judgement). Both are now easier, not harder, than they would have been
+as a spike.
 
-Exit criteria — a written measurement, not a demo:
-1. **Latency:** p50/p95 time-to-first-token and full-turn latency. If a turn takes 8
-   seconds, the interaction model needs rethinking before anything is built on it.
-2. **Cost:** measured USD for one complete 45-minute DSA round, with and without prompt
-   caching.
-3. **Quality:** does a phase-driven, tool-use-controlled interviewer actually push back
-   usefully, or does it flatter? Judged by you, on a real problem.
-4. **Provider parity:** run the same round through two providers behind the SPI. This
-   proves the abstraction is real before Phase 1 builds on it, and gives an early read on
-   how far apart their judgement actually is.
+**Phase 1 — Foundations.** Portable Flyway schema on embedded H2, domain model, profile
+loader with fail-fast schema validation, session state machine, transcript persistence, WS
+transport, and the `llm` package: provider SPI, Gemini adapter (default) plus Claude
+adapter, key discovery, capability gating, cache-stable prompt assembly, per-provider cost
+ledger. Docker Compose was dropped as unnecessary (§1.1). `mvn -q validate` profile
+validation was **never wired** — validation happens at application startup instead.
 
-**This is throwaway code.** Its output is a decision memo that feeds Phases 1–2.
+**Phase 2 — DSA module.** 5 original questions, 8-phase round, Monaco artifact surface.
 
-### Phase 1 — Foundations
-Docker Compose (app + web), portable Flyway schema on embedded H2, domain model, profile loader with
-fail-fast schema validation, session state machine, transcript persistence, WS transport,
-and the `llm` package: provider SPI, the Gemini adapter (default) plus the Claude
-adapter, key discovery,
-capability gating, cache-stable prompt assembly, and the per-provider cost ledger.
-*Exit:* an empty session can be started, turns persisted and replayed; a cache-hit test
-passes; the same round runs end-to-end on two providers; `mvn -q validate` runs profile
-validation in CI.
+**Phase 3 — LLD module.** 5 original design problems, 6-phase round, reuses the Monaco
+surface (a class model is just Java; no new frontend needed).
 
-Additional adapters (OpenAI, DeepSeek, others) are additive against a frozen SPI and can
-land any time after this phase — they are not gating work.
+**Phase 4 — HLD module.** 4 original problems, 7-phase round, and a new structured
+node/edge `DiagramPane` on the frontend per DM-2. Added `artifactLabel()` to the SPI as a
+`default` method so the prompt announces the graph format rather than assuming code.
 
-### Phase 2 — DSA module *(parallel with 3)*
-Question bank, phase machine, Monaco integration with debounced artifact snapshots,
-complexity/edge-case probing, adaptive follow-ups, DSA rubric.
+**Phase 5 — CS fundamentals + Java deep-dive.** CSF runs 2 topic *packs* rendered once
+into the stable prefix and walked adaptively by the model inside a single `RAPID_FIRE`
+phase — swapping questions from the backend mid-round would invalidate prompt caching
+every turn. Java deep-dive runs 6 production-failure scenarios with probe ladders. Brought
+the first tests into the repo.
 
-### Phase 3 — LLD module *(parallel with 2)*
-Design prompts, class-model surface, SOLID/extensibility/concurrency probes, LLD rubric.
-Bar set high deliberately — your 45-project portfolio means a soft LLD interviewer is
-useless to you.
+### Remaining work
 
-### Phase 4 — HLD module *(parallel with 5)*
-Diagram surface, capacity-estimation phase, bottleneck probing, HLD rubric.
-Diagram surface is a structured node/edge graph per DM-2 — the model reasons over the
-serialised graph, so it can probe named components directly.
+**Phase 6 — Company-calibrated full loop.** *Not started, and the largest remaining gap.*
+`SessionManager.createSession` already creates one `session_round` per profile round for a
+`full_loop` session and marks `enabled_in_v1: false` rounds as `SKIPPED`. What is missing
+is everything that makes it a *loop*: carry-over briefs between rounds (a few hundred
+tokens of what was covered — §1.4 explicitly calls for a fresh context per round rather
+than one accumulating 4-hour transcript), difficulty-curve application, break handling,
+and automatic advance from one completed round to the next.
 
-### Phase 5 — CS fundamentals + Java deep-dive *(parallel with 4)*
-Adaptive rapid-fire walk with per-topic depth tracking; scenario-based Java/Spring
-ladder. Two modules, one phase — they share the depth-ladder machinery.
+**Phase 7 — Evaluation, reports, dashboard, replay.** *Partial.* Per-round rubric scoring
+is built and verified (`evaluation/RoundEvaluator`, §3). Still missing:
+- **Session-level reports.** The `session_report` table is mapped but nothing writes to it.
+- **Readiness rollups and the trend dashboard.** `readiness_snapshot` is mapped but nothing
+  writes to it, and there is no `progress` package. This is where the `emphasis`-weighted,
+  recency-decayed company readiness described in §3 would live.
+- **Anti-inflation anchoring.** Rubric text is fixed and the evaluator is separated from
+  the interviewer, but there are no anchored few-shot examples at each band.
+- **Replay UI.** Backend transcript/artifact endpoints exist; `ReplayView.tsx` exists but
+  is unverified.
 
-### Phase 6 — Company-calibrated full-loop
-Round chaining from `loop.rounds`, difficulty-curve application, quirk injection,
-carry-over briefs between rounds, break handling, `enabled_in_v1: false` rounds announced
-and skipped.
+**Phase 8 — Voice mode.** Not started. Mirrors the LLM layer: a `VoiceProvider` SPI with a
+zero-key browser-native default and optional key-based upgrades. See **DM-1**.
 
-### Phase 7 — Evaluation, reports, dashboard, replay
-Signal aggregation, rubric scoring with anti-inflation anchoring, session reports,
-readiness rollups, trend dashboard, transcript replay with artifact scrubbing.
+**Phase 9 — Polish and hardening.** Not started. Cost controls (per-session ceiling with a
+warning threshold — see D-7), graceful API failure handling mid-round, session recovery
+after a disconnect, packaged single-command startup.
 
-### Phase 8 — Voice mode
-Mirrors the LLM layer: a `VoiceProvider` SPI with a zero-key browser-native default and
-optional key-based upgrades. See **DM-1** for the decision and reasoning.
+**Testing debt, cutting across everything.** 38 tests exist, all covering question-bank
+loading and module prompt text. There is **no integration test** — nothing starts Spring,
+hits an endpoint, or exercises `TurnOrchestrator`. Given how much of this system's
+correctness lives in orchestration (control-call refusal, the silent-turn retry, streaming
+outside transactions), that is the highest-value testing gap.
 
-### Phase 9 — Polish and hardening
-Cost controls (per-session ceiling with a warning threshold), graceful API failure
-handling mid-round, session recovery after a disconnect, packaged single-command startup.
-
-### Parallelisation
+### What the parallelisation plan was for
 
 ```
-Phase 0 ─► Phase 1 ─┬─► Phase 2 (DSA) ──┬─► Phase 6 ─► Phase 7 ─► Phase 9
-                    ├─► Phase 3 (LLD) ──┤
-                    ├─► Phase 4 (HLD) ──┤
-                    └─► Phase 5 (CSF+Java)
-                                         Phase 8 (voice) — independent throughout
+Phase 1 ─┬─► Phase 2 (DSA) ──┬─► Phase 6 ─► Phase 7 ─► Phase 9
+         ├─► Phase 3 (LLD) ──┤
+         ├─► Phase 4 (HLD) ──┤
+         └─► Phase 5 (CSF+Java)
+                              Phase 8 (voice) — independent throughout
 ```
 
-Phases 2–5 are genuinely independent: separate packages, separate question banks,
-separate rubrics, one shared SPI frozen at the end of Phase 1. They are good candidates
-for parallel worktrees — but only if the Phase 1 SPI is genuinely stable, since four
-agents renegotiating an interface mid-flight is worse than doing the work serially. I'd
-suggest starting with 2 and 3 in parallel and judging from there.
+Phases 2–5 were genuinely independent — separate packages, separate question banks,
+separate rubrics, one SPI frozen at the end of Phase 1 — and that held up: all four landed
+without renegotiating the interface, and the one capability that had to be added
+(`artifactLabel()`) went in as a `default` method without touching the others.
+
+**That parallelism is now spent.** Phases 6, 7, and 9 are sequential and share
+`session`/`evaluation` code; running them concurrently would mostly produce conflicts.
 
 ---
 
@@ -465,16 +553,27 @@ that does not compile. The forced dry-run catches a good fraction. If it turns o
 miss too much in practice, a Judge0/Piston container remains a clean Phase 9 addition —
 nothing in the design forecloses it.
 
-### 5.2 Still open
+### 5.2 Resolved since
 
-**D-5 through D-8 — none block the start of work.**
+**D-5 — Question bank sourcing. Resolved: original prose only.** LeetCode problem
+statements are copyrighted; copying them into this repo would be a real licensing problem
+even for personal use. Every question in `question-bank/` is therefore written originally
+for this project — real-world framings (auth tokens, maintenance windows, CDN rollouts)
+over textbook restatements. Standard algorithmic *patterns* are unavoidable and fine;
+copied statement *text* is not.
 
-### D-5 — Question bank sourcing *(Phase 2, before bulk authoring)*
-LeetCode problem statements are copyrighted; scraping a few hundred into a local bank is
-a real licensing problem even for personal use. Cleanest path is original or paraphrased
-prompts (Claude can generate them against a difficulty/tag spec) plus genuinely public
-sources. Slightly more work up front, no legal ambiguity, and paraphrased prompts have a
-side benefit: you cannot pattern-match a memorised problem.
+Two practical notes for whoever extends the banks:
+- Curated lists such as Striver's A2Z sheet are useful as **topic coverage checklists** —
+  they are indexes of links into LeetCode/GfG, not a source of text to copy.
+- Current coverage skews toward hashing, intervals, sliding window, heaps and greedy.
+  Binary search, trees/BST, graphs, backtracking, DP and tries are **not yet represented**
+  in the DSA bank.
+
+**D-8 — Which providers ship first. Resolved: Gemini, then Claude.** Both adapters are
+built and both stream genuinely. OpenAI and DeepSeek remain configured-but-stubbed in
+`config/providers.yaml` with no adapter; adding one is additive against the frozen SPI.
+
+### 5.3 Still open
 
 ### D-6 — Behavioral rounds *(Phase 6)*
 Google's Googleyness, Atlassian's Values, and Microsoft's AA round are in the profiles
@@ -482,43 +581,78 @@ but marked `enabled_in_v1: false` — behavioral was not in your module list. At
 Values round in particular can sink an otherwise strong loop. Options: leave skipped,
 add a thin behavioral module in Phase 6, or make it a Phase 10.
 
-### D-7 — Per-session cost ceiling *(Phase 9, needs Phase 0 data)*
-A full 4-hour loop is many hundreds of streamed turns. Once Phase 0 gives a real
-$/round number, decide whether the app enforces a hard ceiling, warns, or just reports.
-Now per-provider, since the same loop will cost very different amounts on different
-backends.
+Now more tractable than when first raised: adding a module is purely additive against the
+frozen SPI, and four have been added since without incident.
 
-### D-8 — Which providers ship in Phase 1? *(low stakes, easily changed)*
-Gemini first, since it is the default. Claude second, which is what proves the SPI is a
-real abstraction rather than one vendor with extra indirection. OpenAI and DeepSeek are
-additive against a frozen SPI and can land whenever. Say if you would rather reverse the
-order.
+### D-7 — Per-session cost ceiling *(Phase 9)*
+A full 4-hour loop is many hundreds of streamed turns. `llm_call` records per-call cost,
+so the data to decide this is being collected — but **no real $/round figure has been
+measured yet**, partly because `config/providers.yaml` still has `<set-me>` for Gemini
+pricing, so `cost_estimate_usd` currently computes as 0. Filling in real pricing is a
+prerequisite to deciding whether the app enforces a hard ceiling, warns, or just reports.
+
+A related practical limit surfaced during development, worth knowing before designing this:
+the **Gemini free tier allows 20 requests/day per model**, which a couple of full rounds
+will exhaust. Quota is per-model, so switching to `gemini-3.6-flash` provides a separate
+bucket.
+
+### D-9 — Persistence of UI-supplied API keys *(opened during Phase 1 rework)*
+`ProviderKeyStore` holds keys pasted through the settings UI **in memory only** — they are
+lost on restart, deliberately, because persisting a secret is a decision the owner should
+make rather than something an agent quietly implements. Options: keep it as-is (env vars
+are the durable path, the UI is for trying an alternative), encrypt at rest locally, or
+write to a gitignored local file. Unresolved; the current behaviour is a safe default,
+not a conclusion.
 
 ---
 
 ## 6. Stack decisions
 
-Your defaults accepted: Java 17, Spring Boot 3.x, React 19 + Vite, Docker.
-The one amendment is the AI layer — Claude is now the default provider behind a
-multi-provider SPI rather than the only one (DM-5). Other additions, none controversial:
+As built: Java 17, Spring Boot 3.4.3, React 19 + Vite 7. Docker turned out to be
+unnecessary once the database container was dropped (§1.1). The AI layer is a
+multi-provider SPI with **Gemini** as the default and Claude as an alternative (DM-5,
+DM-7). Other choices, none controversial:
 
 | Choice | Instead of | Why |
 |---|---|---|
 | Raw WebSocket + JSON frames | STOMP | One client, one message shape; STOMP's broker semantics buy nothing here |
 | Flyway (ANSI SQL) | Hibernate `ddl-auto` | Transcripts are records; schema changes must be reviewable — and portable SQL keeps MySQL one config change away |
 | H2 file mode | H2 `mem:` / Postgres container | Zero ops and ~512MB saved vs. a DB container, but data survives restarts (DM-6) |
-| Zustand + TanStack Query | Redux | Small app, two state kinds (session socket state, server cache) |
+| Plain React state + hooks | Redux / Zustand / TanStack Query | The plan called for Zustand + TanStack Query; the app was built without either and has not needed them. One screen is live at a time and the socket owns most state. Revisit only if state handling actually starts hurting |
 | Monaco | CodeMirror | You asked for it, and it is the IntelliJ-adjacent muscle memory |
 
 ---
 
-## 7. What I need from you
+## 7. Where to pick up
 
-1. **Approve or amend this plan** — nothing gets coded until then.
-2. **Provider API keys** — whichever you have. One is enough to start Phase 0; a second
-   is what proves the multi-provider SPI is real rather than theoretical. Keys go in a
-   local `.env`, are read server-side only, and are never committed.
-3. **Correct the profiles.** They are all `seeded-unverified`. The highest-value thing
-   you can do is replace guesses with real round structures as you learn them.
+Ordered by value, for whoever works on this next.
 
-D-5 through D-8 stay open and none of them block Phase 0.
+**1. Use the thing.** All five modules work. The most valuable input now is the owner
+actually sitting a round and reporting what feels wrong — prompt tuning against real
+sessions cannot be done from the outside, and every module's prompts were tuned against
+Gemini's behaviour on a handful of turns, not a full round.
+
+**2. Correct the company profiles.** All 11 remain `seeded-unverified` — plausible
+defaults, not facts. Replacing guesses with real round structures is the highest-value
+thing only the owner can do, and it needs no code change.
+
+**3. Close the Phase 0 measurements that were never taken.** Both are now cheap:
+   - **Cache-hit verification.** Log/assert `cache_read_tokens` is non-zero by the third
+     turn of a round. Prompt caching is the single biggest cost lever and nothing has ever
+     confirmed it works — and per §1.4 it fails *silently*.
+   - **Provider parity.** Run one round through Gemini and the same through Claude. This is
+     what proves the SPI is a real abstraction, and gives a first read on how far apart
+     their judgement is.
+
+**4. Fill in real pricing in `config/providers.yaml`.** Gemini's entries are `<set-me>`, so
+every `cost_estimate_usd` currently computes as 0 and the cost ledger — a first-class
+concern in this design — is recording nothing useful. Prerequisite for D-7.
+
+**5. Then the roadmap:** Phase 6 (full-loop chaining) is the largest functional gap; the
+rest of Phase 7 (session reports, readiness rollups, dashboard) is what turns individual
+rounds into the progress tracking this project exists for.
+
+**Testing debt is worth paying down alongside any of the above.** There is no integration
+test at all — see §4.
+
+D-6, D-7 and D-9 remain open and none of them block the work above.
