@@ -1,0 +1,65 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: lowest-common-config-ancestor
+title: Lowest Common Config Ancestor
+difficulty: medium
+tags:
+  - trees
+  - recursion
+  - dfs
+
+statement: >
+  A feature-flag management system organises flags into a tree hierarchy. Each node
+  has a unique string identifier and at most two children (left and right). Flags
+  inherit their parent's default value, so the tree structure matters operationally —
+  changing a node's default affects everything below it.
+
+  When an engineer needs to understand the shared context of two flags, the system
+  must find their lowest common ancestor (LCA): the deepest node in the tree that
+  is an ancestor of both given flag nodes. A node is considered an ancestor of
+  itself.
+
+  Given the root of the binary tree and the identifiers of two nodes `p` and `q`
+  that are guaranteed to exist in the tree, return the identifier of their LCA.
+
+constraints:
+  - "2 <= number of nodes <= 10^4"
+  - "All node identifiers are unique non-empty strings"
+  - "p != q"
+  - "Both p and q exist in the tree"
+
+example: |
+  Tree structure:
+          platform
+         /        \
+      payments    search
+      /    \         \
+   checkout billing  ranking
+   /
+  cart
+
+  p = "cart", q = "billing"
+  → "payments"   (payments is the deepest node that is an ancestor of both cart and billing)
+
+  p = "payments", q = "cart"
+  → "payments"   (payments is an ancestor of itself and of cart)
+
+  p = "checkout", q = "ranking"
+  → "platform"   (their paths diverge at the root)
+
+interviewer_notes: >
+  Intended solution: recursive post-order traversal. At each node, recurse left and
+  right. If the current node matches p or q, return it. If both subtrees return
+  non-null, this node is the LCA. If only one subtree returns non-null, propagate it
+  up. O(n) time, O(h) stack space where h is the tree height. A brute-force approach
+  using parent pointers or path lists (find path to p, find path to q, walk both
+  paths to find the last common node) is O(n) time and O(n) explicit space — it's a
+  correct alternative and easier to reason about; do not penalize it, but ask the
+  candidate to compare trade-offs. Key things to probe: (1) why the "node is an
+  ancestor of itself" rule matters for correctness — without it, when one target is
+  an ancestor of the other the algorithm would return the wrong node, (2) what
+  happens if p or q is not in the tree (the problem says guaranteed, but asking
+  "what would you change if it weren't guaranteed?" is a strong FOLLOW_UP probe),
+  and (3) the stack depth concern on a skewed tree — O(n) stack frames can blow the
+  stack in production. A candidate who mentions iterative conversion or tail-call
+  considerations is showing real engineering awareness.

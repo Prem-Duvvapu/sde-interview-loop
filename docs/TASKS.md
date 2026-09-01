@@ -378,12 +378,13 @@ apart their judgement is, which is the entire reason the evaluator is pinned (§
 More questions, better topic coverage.
 
 ### Why it matters
-Banks are starter-sized: DSA 5, LLD 5, HLD 4, Java 6, CSF 2 packs. With a bank this small
+Banks are starter-sized: DSA 11, LLD 5, HLD 4, Java 6, CSF 2 packs. With a bank this small
 you will start recognising questions, which destroys the point. There is also no
 recency-avoidance — selection is random within a difficulty band.
 
-**DSA coverage gaps:** binary search, trees/BST, graphs (BFS/DFS), backtracking, DP, tries
-are all absent. Current bank skews to hashing, intervals, sliding window, heaps, greedy.
+**DSA coverage gaps (filled):** binary search, trees, graphs (BFS/DFS/Dijkstra),
+backtracking, DP, and tries were added. Remaining coverage to grow: stack/monotonic-stack,
+union-find, and two-pointer patterns.
 
 ### Steps
 1. Copy an existing YAML file in `question-bank/<module>/` as your template.

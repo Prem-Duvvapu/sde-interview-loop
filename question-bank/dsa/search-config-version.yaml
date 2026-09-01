@@ -1,0 +1,50 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: search-config-version
+title: Search Config Version
+difficulty: medium
+tags:
+  - binary-search
+  - arrays
+
+statement: >
+  A configuration service keeps a chronologically ordered list of snapshot versions.
+  Each snapshot has a `created_at` timestamp (a positive long, milliseconds since epoch).
+  Timestamps are strictly increasing — no two snapshots share one. When a downstream
+  service requests the config "as of" a given timestamp `t`, the system needs to serve
+  the latest snapshot whose `created_at` is less than or equal to `t`. If no snapshot
+  exists at or before `t`, return -1 (or null).
+
+  Given the sorted array of timestamps and a target `t`, return the index of the
+  snapshot to serve, or -1 if none qualifies.
+
+constraints:
+  - "1 <= timestamps.length <= 10^6"
+  - "1 <= timestamps[i] <= 10^18"
+  - "timestamps is sorted in strictly ascending order"
+  - "1 <= t <= 10^18"
+
+example: |
+  timestamps = [100, 250, 400, 700, 1200], t = 500
+  → 2   (snapshot at index 2 has timestamp 400 <= 500; index 3 has 700 > 500)
+
+  timestamps = [100, 250, 400, 700, 1200], t = 50
+  → -1  (no snapshot at or before 50)
+
+  timestamps = [100, 250, 400, 700, 1200], t = 1200
+  → 4   (exact match)
+
+interviewer_notes: >
+  Intended solution: binary search for the rightmost element <= t. This is the
+  upper-bound variant — initialise `result = -1`, and whenever `mid` satisfies
+  `timestamps[mid] <= t`, record `result = mid` and search right (`lo = mid + 1`);
+  otherwise search left (`hi = mid - 1`). O(log n) time, O(1) space. A linear scan
+  is the obvious brute force at O(n) and is an acceptable starting point; push the
+  candidate toward binary search by APPROACH if they don't reach for it themselves.
+  Common pitfalls: (1) returning the first element <= t rather than the last (wrong
+  search direction after a match), (2) off-by-one on `lo`/`hi` boundaries, and
+  (3) integer overflow on `lo + hi` when computing mid — using `lo + (hi - lo) / 2`
+  avoids this and is worth a point in EDGE_CASES if the candidate raises it with the
+  10^18 constraint. Note the strictly-ascending invariant means there are no
+  duplicates, simplifying the search — but do not tell the candidate this until they
+  ask. Whether they clarify "can timestamps repeat?" is itself a signal.

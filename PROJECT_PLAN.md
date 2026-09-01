@@ -675,9 +675,9 @@ copied statement *text* is not.
 Two practical notes for whoever extends the banks:
 - Curated lists such as Striver's A2Z sheet are useful as **topic coverage checklists** —
   they are indexes of links into LeetCode/GfG, not a source of text to copy.
-- Current coverage skews toward hashing, intervals, sliding window, heaps and greedy.
-  Binary search, trees/BST, graphs, backtracking, DP and tries are **not yet represented**
-  in the DSA bank.
+- Current coverage spans hashing, sliding window, intervals, heaps, greedy, binary search,
+  trees, graphs (Dijkstra), backtracking, DP, and tries (11 questions). Remaining gaps
+  worth filling: stack/monotonic-stack, union-find, and two-pointer patterns.
 
 **D-8 — Which providers ship first. Resolved: Gemini, then Claude.** Both adapters are
 built and both stream genuinely. OpenAI and DeepSeek remain configured-but-stubbed in
