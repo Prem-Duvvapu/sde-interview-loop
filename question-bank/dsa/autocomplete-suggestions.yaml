@@ -1,0 +1,71 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: autocomplete-suggestions
+title: Autocomplete Suggestions
+difficulty: medium
+tags:
+  - trie
+  - strings
+  - dfs
+
+statement: >
+  An API gateway logs every endpoint path that developers hit (e.g. "/users/list",
+  "/orders/create", "/users/profile"). A developer search bar needs an autocomplete
+  feature: given a prefix the developer has typed so far, return up to `k` distinct
+  endpoint paths that start with that prefix. If more than `k` paths match, return
+  the `k` that were inserted most recently (most recent first). If fewer than `k`
+  match, return all of them (most recent first).
+
+  Implement a data structure that supports two operations:
+
+  1. `record(path)` — record that this endpoint path was just accessed.
+     If the path has been seen before, update its "last accessed" timestamp.
+
+  2. `suggest(prefix, k)` — return up to `k` distinct paths matching the prefix,
+     ordered from most-recently-accessed to least.
+
+constraints:
+  - "1 <= path.length <= 200"
+  - "paths consist of lowercase letters, digits, '/' and '_'"
+  - "1 <= k <= 100"
+  - "Total calls to record and suggest combined <= 10^5"
+
+example: |
+  record("/users/list")
+  record("/users/profile")
+  record("/orders/create")
+  record("/users/list")        — updates recency of "/users/list"
+
+  suggest("/users", 2)
+  → ["/users/list", "/users/profile"]
+     ("/users/list" is more recent; both match the prefix)
+
+  suggest("/orders", 5)
+  → ["/orders/create"]
+     (only one match, so return it even though k=5)
+
+  suggest("/payments", 1)
+  → []
+     (no paths start with "/payments")
+
+interviewer_notes: >
+  Intended solution: a trie where each node optionally stores the full path string
+  and a monotonically increasing timestamp (incremented on each record() call).
+  record() inserts or updates the path's leaf node with the current timestamp.
+  suggest() walks the trie to the prefix node, then does a DFS/BFS to collect all
+  leaf nodes below it, sorts them by timestamp descending, and returns the top k.
+  Alternatively, each node can maintain a sorted set or min-heap of the top-k
+  timestamps in its subtree for faster queries at the cost of more complex updates.
+  The simple approach (collect all, sort, take k) is O(m + p log p) per suggest
+  where m is prefix length and p is the number of matching paths, and O(m) per
+  record — perfectly acceptable at SDE-2 level. The candidate should articulate why
+  a trie is better than a flat list with startsWith() for this use case: prefix
+  traversal avoids scanning all stored paths. Probe: (1) "what happens if you call
+  record with a path that already exists?" — must update timestamp, not insert a
+  duplicate; a candidate who creates duplicates will break the "distinct" guarantee,
+  (2) "how would you handle case-insensitive matching?" — normalize to lowercase on
+  insert and query, straightforward but shows practical thinking, (3) "what's the
+  space complexity?" — O(total characters across all unique paths) for the trie,
+  which can be significant; a candidate who mentions this shows awareness of
+  practical constraints. A hash map from path to timestamp plus a linear prefix
+  scan is a valid O(n) brute force; it should score as a correct baseline approach.

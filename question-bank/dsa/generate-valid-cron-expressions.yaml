@@ -1,0 +1,63 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: generate-valid-cron-expressions
+title: Generate Valid Cron Expressions
+difficulty: medium-hard
+tags:
+  - backtracking
+  - recursion
+  - pruning
+
+statement: >
+  A job scheduler accepts simplified cron expressions with three fields: hour (0–23),
+  minute (0 or 30 — only half-hour granularity), and day-of-week (0–6, Monday=0).
+  An engineer provides a list of allowed values for each field, and a list of
+  blackout rules. Each blackout rule is a pair `[hour, day]` meaning "no job may be
+  scheduled at this hour on this day, at any minute."
+
+  Generate all valid `[hour, minute, day]` triples that use only the allowed values
+  for each field and do not violate any blackout rule. Return them sorted
+  lexicographically (by hour, then minute, then day).
+
+constraints:
+  - "allowed_hours is a non-empty subset of 0..23, sorted ascending"
+  - "allowed_minutes is a non-empty subset of {0, 30}, sorted ascending"
+  - "allowed_days is a non-empty subset of 0..6, sorted ascending"
+  - "0 <= blackouts.length <= 168"
+  - "Each blackout is [hour, day]"
+
+example: |
+  allowed_hours = [9, 14], allowed_minutes = [0, 30], allowed_days = [0, 4]
+  blackouts = [[9, 4]]
+
+  All combinations:
+    [9,  0, 0]  — hour 9, day 0: no blackout → valid
+    [9,  0, 4]  — hour 9, day 4: blackout [9,4] → SKIP
+    [9, 30, 0]  — hour 9, day 0: no blackout → valid
+    [9, 30, 4]  — hour 9, day 4: blackout [9,4] → SKIP
+    [14, 0, 0]  — no blackout → valid
+    [14, 0, 4]  — no blackout → valid
+    [14,30, 0]  — no blackout → valid
+    [14,30, 4]  — no blackout → valid
+
+  → [[9,0,0], [9,30,0], [14,0,0], [14,0,4], [14,30,0], [14,30,4]]
+
+interviewer_notes: >
+  Intended solution: backtracking that builds triples field-by-field (hour → minute
+  → day) and prunes as early as possible. When an hour+day combination is blacklisted,
+  the entire subtree for that (hour, *, day) is pruned at the day level, avoiding
+  unnecessary work. With these input sizes a brute-force enumerate-then-filter is
+  technically fast enough, but the interview value is in whether the candidate
+  structures the recursion with early pruning rather than generating everything and
+  filtering at the end. Probe specifically: (1) where the blackout check goes — a
+  candidate who checks after generating the full triple is doing generate-then-filter,
+  which defeats the purpose of backtracking; push them to check at the day level where
+  the blackout is fully determined, (2) how they handle the "sorted lexicographically"
+  requirement — if allowed values are iterated in sorted order, the output is
+  automatically sorted, which is the clean answer; a candidate who generates then sorts
+  is correct but shows less insight, (3) the time complexity: O(H * M * D) where H, M,
+  D are the sizes of the allowed sets, which is bounded by 24 * 2 * 7 = 336 — tiny, but
+  the structural reasoning about pruning is the signal, not the raw performance. A good
+  follow-up: "what if blackouts were on (hour, minute, day) triples instead of just
+  (hour, day)?" — the pruning moves deeper, and the candidate should recognise that
+  the structure stays the same but the check point changes.

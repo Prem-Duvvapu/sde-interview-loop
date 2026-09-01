@@ -1,0 +1,61 @@
+# Original problem, written for this project — not copied or paraphrased from LeetCode
+# or any other question bank. See PROJECT_PLAN.md D-5.
+slug: minimum-deployment-cost
+title: Minimum Deployment Cost
+difficulty: medium
+tags:
+  - dynamic-programming
+  - arrays
+
+statement: >
+  A release pipeline has `n` stages (numbered 0 to n-1). At each stage, the team
+  picks one of `k` deployment strategies (e.g. blue-green, canary, rolling). Each
+  strategy has a base cost that varies by stage — given as a 2D array `cost[i][j]`,
+  where `cost[i][j]` is the base cost of using strategy `j` at stage `i`.
+
+  There is an additional penalty: if two consecutive stages use the same strategy, an
+  extra `penalty` is added to the total (representing the operational overhead of not
+  rotating strategies, such as resource contention or team fatigue).
+
+  Find the minimum total cost to deploy through all `n` stages, choosing exactly one
+  strategy per stage.
+
+constraints:
+  - "1 <= n <= 500"
+  - "2 <= k <= 20"
+  - "1 <= cost[i][j] <= 1000"
+  - "0 <= penalty <= 1000"
+
+example: |
+  cost = [[10, 25, 15],
+          [20, 10, 30],
+          [5,  15, 10]], penalty = 8
+
+  Stage 0: pick strategy 0 (cost 10)
+  Stage 1: pick strategy 1 (cost 10, different from prev → no penalty)
+  Stage 2: pick strategy 0 (cost 5, different from prev → no penalty)
+  Total = 10 + 10 + 5 = 25
+
+  Alternative — stage 0: strat 0 (10), stage 1: strat 0 (20 + 8 penalty = 28),
+  stage 2: strat 0 (5 + 8 = 13) → total 10 + 28 + 13 = 51 (worse)
+
+  → 25
+
+interviewer_notes: >
+  Intended solution: DP where dp[i][j] = minimum cost to reach stage i having
+  chosen strategy j. Transition: dp[i][j] = cost[i][j] + min over all j' of
+  (dp[i-1][j'] + (penalty if j' == j, else 0)). Base case: dp[0][j] = cost[0][j].
+  Answer: min(dp[n-1][*]). Naive is O(n * k^2); can be optimised to O(n * k) by
+  tracking the global minimum and second-minimum of the previous row (since the
+  penalty only applies when j == j', the optimal previous strategy is always the
+  global min unless it's the same index, in which case use the second min). The
+  O(n * k^2) solution is perfectly acceptable for SDE-2 and should score full marks —
+  the O(n * k) optimisation is a strong signal if the candidate reaches for it but
+  should not be expected. Probe: (1) make sure the candidate defines the state
+  clearly before coding — "what does dp[i][j] represent?" is the fundamental question,
+  (2) check they handle the penalty correctly: it is added only when j == j', not
+  when strategies are "similar", (3) space optimisation: since dp[i] only depends on
+  dp[i-1], the candidate can use two 1D arrays instead of a 2D table. A candidate who
+  spots this unprompted shows practical DP fluency. (4) Edge case: when penalty is 0,
+  the answer is simply the sum of each row's minimum — a candidate who checks this
+  degenerate case shows good instincts.

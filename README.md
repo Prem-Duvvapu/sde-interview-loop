@@ -117,7 +117,7 @@ The detailed package map, prompt-caching rules, and data-flow diagrams are in
 
 | Module | Shape | Work surface | Questions |
 |---|---|---|---|
-| **DSA** | One algorithmic problem, 8 phases | Monaco (Java) | 5 |
+| **DSA** | One algorithmic problem, 8 phases | Monaco (Java) | 11 |
 | **LLD** | One design problem, 6 phases | Monaco (Java class model) | 5 |
 | **HLD** | One system design problem, 7 phases | Node/edge design graph | 4 |
 | **CS fundamentals** | Rapid-fire topic pack, adaptive walk | Scratchpad (markdown) | 2 packs |
