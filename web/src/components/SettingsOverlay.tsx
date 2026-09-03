@@ -12,6 +12,7 @@ import {
 } from '../api/client';
 import type { AppSettings, ProviderInfo, VerifyResult } from '../api/types';
 import { titleCase } from '../lib/format';
+import { ResumeSection } from './ResumeSection';
 
 interface Props {
   open: boolean;
@@ -191,6 +192,8 @@ export function SettingsOverlay({ open, onClose }: Props) {
                 unavailable={settingsUnavailable}
                 onSettings={setSettings}
               />
+
+              <ResumeSection />
 
               <section className="settings-section">
                 <h3>Providers</h3>

@@ -13,7 +13,8 @@ export const PHASE_SEQUENCES: Record<ModuleTypeId, string[]> = {
   hld: ['BRIEFING', 'REQUIREMENTS', 'ESTIMATION', 'HIGH_LEVEL', 'DEEP_DIVE', 'BOTTLENECK', 'WRAP'],
   cs_fundamentals: ['BRIEFING', 'RAPID_FIRE', 'WRAP'],
   java_deep_dive: ['BRIEFING', 'SCENARIO', 'PROBE', 'DEPTH_LADDER', 'TRADE_OFF', 'WRAP'],
-  behavioral: ['BRIEFING', 'RAPID_FIRE', 'WRAP'],
+  behavioral: ['BRIEFING', 'STORY_SELECTION', 'STAR_PROBE', 'REFLECTION', 'WRAP'],
+  resume: ['BRIEFING', 'PROJECT_SELECTION', 'ROLE_AND_CONTRIBUTION', 'TECHNICAL_DEEP_DIVE', 'IMPACT_AND_METRICS', 'WRAP'],
 };
 
 export const MODULE_LABELS: Record<ModuleTypeId, string> = {
@@ -23,10 +24,19 @@ export const MODULE_LABELS: Record<ModuleTypeId, string> = {
   cs_fundamentals: 'CS fundamentals',
   java_deep_dive: 'Java deep dive',
   behavioral: 'Behavioral',
+  resume: 'Resume deep dive',
 };
 
-/** Modules the v1 interview loop can actually run. */
-export const RUNNABLE_MODULES: ModuleTypeId[] = ['dsa', 'lld', 'hld', 'cs_fundamentals', 'java_deep_dive'];
+/**
+ * Modules the interview loop can actually run. `resume` is listed unconditionally —
+ * SetupView does not yet check whether a resume is on file before offering it. Picking
+ * it with none uploaded fails with a clear backend error (ResumeInterviewerModule ->
+ * "No resume has been uploaded yet"), not a crash, but pre-filtering it in the UI would
+ * be a better experience. Left as a known gap rather than half-wired state.
+ */
+export const RUNNABLE_MODULES: ModuleTypeId[] = [
+  'dsa', 'lld', 'hld', 'cs_fundamentals', 'java_deep_dive', 'behavioral', 'resume',
+];
 
 const PHASE_LABEL_OVERRIDES: Record<string, string> = {
   DSA: 'DSA',
@@ -61,8 +71,9 @@ export function sequenceFor(moduleType: ModuleTypeId, currentPhase: string | nul
 export function defaultLanguageFor(moduleType: ModuleTypeId): string {
   switch (moduleType) {
     case 'hld':
-      return 'markdown';
     case 'cs_fundamentals':
+    case 'behavioral':
+    case 'resume':
       return 'markdown';
     default:
       return 'java';
@@ -77,6 +88,8 @@ export function artifactLabelFor(moduleType: ModuleTypeId): string {
     case 'lld':
       return 'Class model';
     case 'cs_fundamentals':
+    case 'behavioral':
+    case 'resume':
       return 'Scratchpad';
     default:
       return 'Code';

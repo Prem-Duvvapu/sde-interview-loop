@@ -1,0 +1,21 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: ambiguous-requirements
+title: Unclear Requirements
+difficulty: medium
+tags: [ambiguity, ownership]
+star_focus: action
+
+prompt: >
+  Tell me about a time you were asked to build something where the requirements were
+  vague or kept changing. How did you handle it?
+
+interviewer_notes: >
+  Weak answers describe waiting for clarity, or building the wrong thing and blaming
+  the ambiguity itself. Strong answers describe what they did to REDUCE the ambiguity
+  themselves — asking specific questions, building a small piece and getting feedback
+  early, making an explicit assumption and flagging it rather than guessing silently.
+  Push on: "what's one specific question you asked, or one specific assumption you
+  wrote down?" — a candidate who can't name one concrete action here is describing a
+  feeling, not a behaviour. If their story is really about someone else failing to
+  give clear requirements with no action of their own, that is thin evidence for this
+  question specifically — note it as such rather than crediting it as a full answer.

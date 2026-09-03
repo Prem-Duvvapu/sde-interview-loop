@@ -113,7 +113,7 @@ The detailed package map, prompt-caching rules, and data-flow diagrams are in
    separate evaluator model turns them into per-dimension scores, strengths, gaps, and a
    readiness band.
 
-### The five round types
+### The seven round types
 
 | Module | Shape | Work surface | Questions |
 |---|---|---|---|
@@ -122,9 +122,13 @@ The detailed package map, prompt-caching rules, and data-flow diagrams are in
 | **HLD** | One system design problem, 7 phases | Node/edge design graph | 4 |
 | **CS fundamentals** | Rapid-fire topic pack, adaptive walk | Scratchpad (markdown) | 2 packs |
 | **Java deep-dive** | One production-failure scenario, probe ladder | Monaco (Java) | 6 |
+| **Behavioral** | One STAR-format question, 5 phases | Scratchpad (markdown) | 5 |
+| **Resume deep-dive** | Upload a PDF resume; the interviewer picks a project from it | Scratchpad (markdown) | — (your resume, not a bank) |
 
 The banks are starter-sized, not exhaustive — growing them is straightforward (add a YAML
-file; it is picked up at boot).
+file; it is picked up at boot). Resume deep-dive is practice-only, not part of any
+company's formal loop — upload a PDF resume in Settings first (parsed server-side, only
+the extracted text is stored, the file itself never is).
 
 ---
 
@@ -214,6 +218,9 @@ POST   /api/providers/{id}/verify                       test a key with a live c
 GET    /api/settings                                    interviewer/evaluator bindings
 PUT    /api/settings/interviewer                        change the interviewer
 PUT    /api/settings/evaluator                          change the evaluator (needs confirmation)
+POST   /api/resume                                      upload a resume (multipart PDF)
+GET    /api/resume                                      current resume (parsed text)
+DELETE /api/resume                                      clear the current resume
 
 WS     /ws/interview                                    interview turns (streaming)
 ```

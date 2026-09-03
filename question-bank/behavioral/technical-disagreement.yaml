@@ -1,0 +1,23 @@
+# Original prompt, written for this project. The question itself is a common, widely-used
+# industry phrasing — not proprietary text — but the wording and interviewer notes are
+# original to this project (see D-5 in PROJECT_PLAN.md).
+slug: technical-disagreement
+title: A Technical Disagreement
+difficulty: medium
+tags: [conflict, collaboration]
+star_focus: action
+
+prompt: >
+  Tell me about a time you disagreed with a teammate or your manager about a technical
+  decision. What was the disagreement, and how did it resolve?
+
+interviewer_notes: >
+  Listen for whether they can state the OTHER side's position fairly — a candidate who
+  can only articulate their own view, or who caricatures the disagreement to make
+  themselves obviously right, is a real signal for star_focus=action (they're narrating
+  a story where they were never wrong, which is rarely true). Push for what actually
+  changed their mind or the other person's, and what happened to the relationship
+  afterward — "we agreed to disagree and I was right anyway" is a weaker answer than a
+  genuine compromise or a case where they were persuaded. A candidate who cannot name a
+  single technical disagreement in two years of work is itself signal, gently probed
+  ("even a small one?") rather than accepted at face value.

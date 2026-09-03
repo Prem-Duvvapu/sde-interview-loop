@@ -53,9 +53,14 @@ public class SessionStateMachine {
                 RoundPhase.DEPTH_LADDER, RoundPhase.TRADE_OFF, RoundPhase.WRAP
         ));
 
-        // Behavioral — disabled in v1, but define phases for completeness
         map.put(ModuleType.BEHAVIORAL, List.of(
-                RoundPhase.BRIEFING, RoundPhase.WRAP
+                RoundPhase.BRIEFING, RoundPhase.STORY_SELECTION, RoundPhase.STAR_PROBE,
+                RoundPhase.REFLECTION, RoundPhase.WRAP
+        ));
+
+        map.put(ModuleType.RESUME, List.of(
+                RoundPhase.BRIEFING, RoundPhase.PROJECT_SELECTION, RoundPhase.ROLE_AND_CONTRIBUTION,
+                RoundPhase.TECHNICAL_DEEP_DIVE, RoundPhase.IMPACT_AND_METRICS, RoundPhase.WRAP
         ));
 
         PHASE_SEQUENCES = Collections.unmodifiableMap(map);

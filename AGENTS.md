@@ -300,17 +300,26 @@ Current dimensions per module (see `PROJECT_PLAN.md` §3):
 - **HLD** (`hld-v1`): requirements_scoping, capacity_estimation, component_design, trade_off_reasoning, bottleneck_identification, depth_on_probe
 - **CSF** (`csf-v1`): breadth, depth_on_probe, precision_of_language, honesty_at_boundary
 - **Java** (`java-v1`): api_fluency, internals_depth, concurrency_correctness, framework_trade_offs, scenario_diagnosis
+- **Behavioral** (`behavioral-v1`): specificity, ownership, self_awareness, impact_and_result, communication_structure
+- **Resume** (`resume-v1`): ownership_clarity, technical_depth, decision_reasoning, impact_articulation, consistency_with_resume
 
 ### Module content shapes differ
 
 Not every module is "one question per round":
-- **DSA / LLD / HLD** — one question per round, from a bank of independent YAML files.
+- **DSA / LLD / HLD / Behavioral** — one question per round, from a bank of independent
+  YAML files.
 - **CS fundamentals** — a *pack* of topics, each with questions and depth probes. The
   whole pack renders once into the stable problem block; the model walks it adaptively
   inside a single `RAPID_FIRE` phase. Swapping questions mid-round from the backend would
   invalidate prompt caching every turn, which is why the walk is model-driven.
 - **Java deep-dive** — one production-failure scenario per round, with a probe ladder in
   the scenario file.
+- **Resume** — no file-backed bank at all. The "content" is the candidate's own uploaded
+  resume (`resume.ResumeService`); the model itself picks which project to focus on,
+  the way a real interviewer scanning a resume would. Pinned by content hash at round
+  start (`RoundContext.questionContentHash`) so a re-upload mid-round can't change what
+  the round is scored against. `ModuleType.RESUME` is practice-only — not part of any
+  company's formal loop, single-module sessions only.
 
 ### Work surfaces
 
@@ -319,7 +328,7 @@ editing:
 - DSA, LLD, Java deep-dive → `CODE`, Monaco editor, Java
 - HLD → `DIAGRAM`, a structured node/edge graph (`DiagramPane.tsx`) serialised as
   `{nodes, edges}` JSON. **Not a drawing tool** — the model reasons over component names.
-- CS fundamentals → `SCRATCH`, plain scratchpad (markdown in the editor)
+- CS fundamentals, Behavioral, Resume → `SCRATCH`, plain scratchpad (markdown in the editor)
 
 Note the frontend picks its pane from `moduleType` (`InterviewView.tsx`, `phases.ts`), not
 from `artifactKind()` — so a new module needs both sides updated.
@@ -398,6 +407,10 @@ The owner's key is an `export` in `~/.zshrc`, not a `.env` file. Either works �
   reference standard.
 - **Never commit API keys.** `GEMINI_API_KEY` is in this environment. `git diff` before
   pushing. **The GitHub repo is public.**
+- **Same discipline for resume content.** A resume is real personal data — never log it,
+  never include it in a commit, an error message, or a test fixture with real-looking
+  personal details. `ResumeService` already keeps it out of the DB-backing file's
+  gitignored path and out of every log line; keep it that way if you touch that code.
 - Do not commit `data/` (the H2 database), `target/`, or `node_modules/`. They are
   gitignored; keep it that way.
 

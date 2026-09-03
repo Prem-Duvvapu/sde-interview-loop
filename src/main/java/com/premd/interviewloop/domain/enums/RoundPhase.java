@@ -37,6 +37,17 @@ public enum RoundPhase {
     DEPTH_LADDER,
     TRADE_OFF,
 
+    // Resume deep-dive phases
+    PROJECT_SELECTION,
+    ROLE_AND_CONTRIBUTION,
+    TECHNICAL_DEEP_DIVE,
+    IMPACT_AND_METRICS,
+
+    // Behavioral phases
+    STORY_SELECTION,
+    STAR_PROBE,
+    REFLECTION,
+
     // Meta
     PENDING
 }

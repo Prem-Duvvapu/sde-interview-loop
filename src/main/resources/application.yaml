@@ -36,6 +36,13 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
 
+  servlet:
+    multipart:
+      # Default is 1MB, which rejects most real PDFs. ResumeService enforces its own
+      # 10MB cap; this just has to be at least that.
+      max-file-size: 10MB
+      max-request-size: 10MB
+
 # Application-specific config
 app:
   profiles-dir: company-profiles

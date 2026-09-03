@@ -1,0 +1,21 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: learning-under-pressure
+title: Learning Something Fast Under Pressure
+difficulty: medium
+tags: [growth, pressure]
+star_focus: situation
+
+prompt: >
+  Tell me about a time you had to learn something unfamiliar quickly to get a piece of
+  work done. What was it, and how did you get up to speed?
+
+interviewer_notes: >
+  This probes genuine depth of learning versus surface exposure. Push past the topic
+  name itself ("I had to learn Kafka") into what specifically they learned and how they
+  verified they understood it correctly before shipping — did they read source/docs, ask
+  someone, or just copy a pattern that happened to work? "I looked it up and it worked"
+  is weaker than "I looked it up, then verified my understanding by [specific check]
+  before relying on it." A candidate who describes learning something but clearly still
+  doesn't understand it (vague on follow-up questions about the thing they claim to have
+  learned) is a real gap — probe once directly on a technical detail of what they
+  learned to check this.

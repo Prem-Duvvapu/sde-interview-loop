@@ -685,14 +685,23 @@ built and both stream genuinely. OpenAI and DeepSeek remain configured-but-stubb
 
 ### 5.3 Still open
 
-### D-6 — Behavioral rounds *(Phase 6)*
-Google's Googleyness, Atlassian's Values, and Microsoft's AA round are in the profiles
-but marked `enabled_in_v1: false` — behavioral was not in your module list. Atlassian's
-Values round in particular can sink an otherwise strong loop. Options: leave skipped,
-add a thin behavioral module in Phase 6, or make it a Phase 10.
+### D-6 — Behavioral rounds. Resolved: a real module, enabled in every profile that has one.
+`interviewer.behavioral.BehavioralInterviewerModule` (5-phase: BRIEFING →
+STORY_SELECTION → STAR_PROBE → REFLECTION → WRAP, `behavioral-v1` rubric) shipped, and
+every company profile's behavioral round (Google's Googleyness, Atlassian's Values,
+Microsoft's AA round, and 7 others) was flipped from `enabled_in_v1: false` to `true`.
+Confirms adding a module stayed purely additive against the frozen SPI — five have now
+landed since Phase 1 without incident.
 
-Now more tractable than when first raised: adding a module is purely additive against the
-frozen SPI, and four have been added since without incident.
+**Also shipped alongside it, not originally planned:** `ModuleType.RESUME` — a
+resume-deep-dive module with no file-backed question bank at all. The candidate uploads a
+PDF (`POST /api/resume`, parsed server-side with Apache PDFBox, only the extracted text
+persisted — never the file), and the interviewer model picks a project from it to probe,
+the way a real interviewer scanning a resume would. Practice-only: not part of any
+company's formal loop, single-module sessions only. See `AGENTS.md`'s "Module content
+shapes differ" for how it's pinned by content hash so a mid-round re-upload can't change
+what the round is scored against — and its "Never commit API keys" note, extended to
+resume content, since this is the most sensitive personal data this app now handles.
 
 ### D-7 — Per-session cost ceiling *(Phase 9)*
 A full 4-hour loop is many hundreds of streamed turns. `llm_call` records per-call cost,

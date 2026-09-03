@@ -67,7 +67,7 @@ loop:
       stage: final
       duration_min: 45
       difficulty_target: medium
-      enabled_in_v1: false
+      enabled_in_v1: true
       notes: >
         Scored independently against Atlassian's published values; a weak Values round
         can sink an otherwise strong loop. Out of v1 module scope.

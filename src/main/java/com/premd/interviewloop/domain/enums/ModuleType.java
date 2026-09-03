@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * The five interview module types, matching company profile round definitions.
- * Behavioral is included for profile completeness but is disabled in v1.
+ * The interview module types, matching company profile round definitions.
+ * RESUME is a practice-only module (§ AGENTS.md) — not part of any company's formal
+ * loop, offered as a single-module round only.
  */
 public enum ModuleType {
     DSA("dsa"),
@@ -13,7 +14,8 @@ public enum ModuleType {
     HLD("hld"),
     CS_FUNDAMENTALS("cs_fundamentals"),
     JAVA_DEEP_DIVE("java_deep_dive"),
-    BEHAVIORAL("behavioral");
+    BEHAVIORAL("behavioral"),
+    RESUME("resume");
 
     private final String value;
 

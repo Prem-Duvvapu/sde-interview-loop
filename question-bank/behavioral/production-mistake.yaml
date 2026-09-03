@@ -1,0 +1,23 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: production-mistake
+title: A Mistake That Reached Production
+difficulty: medium
+tags: [ownership, failure]
+star_focus: result
+
+prompt: >
+  Tell me about a time something you shipped caused a real problem in production. What
+  happened, and what did you do about it?
+
+interviewer_notes: >
+  This is the single best ownership probe in the bank. Listen specifically for whether
+  they say "I" at the point the mistake happened, or slide into "we"/passive voice
+  ("it turned out the config was wrong") right at the moment of fault. Both are common;
+  the second is weaker signal for ownership. A strong answer names the actual root
+  cause precisely (not just "a bug"), what they personally did in the immediate
+  aftermath (rollback, hotfix, communication), and — this is the part weak answers
+  skip — what changed afterward so the same class of mistake is harder to make again
+  (a test, a check, a process change). "I fixed it and moved on" without that last part
+  is incomplete. Do not accept a story where nothing was actually their fault — if
+  their example is really about someone else's mistake, redirect once: "tell me about
+  one that actually reached production because of something you did."

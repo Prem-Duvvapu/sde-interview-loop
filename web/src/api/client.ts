@@ -7,6 +7,7 @@ import type {
   KeyMutationResult,
   ProviderInfo,
   ReadinessResult,
+  ResumeInfo,
   SessionRound,
   SessionReport,
   TrendResponse,
@@ -68,7 +69,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
       headers: {
         Accept: 'application/json',
-        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        // FormData sets its own multipart boundary in the Content-Type header —
+        // setting it manually here would break the upload.
+        ...(init?.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...init?.headers,
       },
     });
@@ -176,3 +179,15 @@ export const putEvaluatorBinding = (provider: string, model: string) =>
     method: 'PUT',
     body: JSON.stringify({ provider, model, confirmEpochChange: true }),
   });
+
+// ---------- resume ----------
+
+export const getResume = () => request<ResumeInfo>('/api/resume');
+
+export const uploadResume = (file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return request<ResumeInfo>('/api/resume', { method: 'POST', body: form });
+};
+
+export const deleteResume = () => request<void>('/api/resume', { method: 'DELETE' });

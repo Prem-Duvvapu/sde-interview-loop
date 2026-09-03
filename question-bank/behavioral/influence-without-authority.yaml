@@ -1,0 +1,23 @@
+# Original prompt, written for this project (see D-5 in PROJECT_PLAN.md).
+slug: influence-without-authority
+title: Influencing Without Authority
+difficulty: medium-hard
+tags: [influence, collaboration]
+star_focus: result
+
+prompt: >
+  Tell me about a time you needed another team, or someone more senior than you, to
+  change direction — and you weren't the one with the authority to just decide it.
+  What did you do?
+
+interviewer_notes: >
+  Harder question than the others in this bank — expect more candidates to struggle or
+  give a thin example, and that is itself useful signal at SDE-2 (this skill is
+  genuinely still developing at this level). Listen for what they actually did to
+  build the case: data, a small prototype, finding an ally, framing the ask around the
+  other party's own incentives rather than just "I was right." A candidate who
+  describes simply repeating their request more forcefully, or escalating to a manager
+  as the first move rather than a last one, is showing a real gap here — worth a gentle
+  follow-up ("did you try anything before that?") rather than immediately marking it
+  down, since a two-years-experience candidate legitimately may not have needed this
+  skill often yet.

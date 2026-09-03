@@ -10,7 +10,15 @@ export type ModuleTypeId =
   | 'hld'
   | 'cs_fundamentals'
   | 'java_deep_dive'
-  | 'behavioral';
+  | 'behavioral'
+  | 'resume';
+
+export interface ResumeInfo {
+  originalFilename?: string | null;
+  contentText: string;
+  contentLength: number;
+  uploadedAt: string;
+}
 
 export type SessionModeId = 'single_module' | 'full_loop';
 

@@ -92,6 +92,13 @@
             <artifactId>reactor-core</artifactId>
         </dependency>
 
+        <!-- Resume upload: PDF text extraction. Pure Java, no native deps. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+
         <!-- .env file support -->
         <dependency>
             <groupId>me.paulschwarz</groupId>

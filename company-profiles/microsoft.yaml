@@ -67,7 +67,7 @@ loop:
       stage: final
       duration_min: 60
       difficulty_target: medium-hard
-      enabled_in_v1: false
+      enabled_in_v1: true
       notes: >
         Senior interviewer with decision authority; mixes behavioral with a deep dive
         anywhere they choose. Out of v1 module scope — full-loop mode will announce and

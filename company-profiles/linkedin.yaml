@@ -73,7 +73,7 @@ loop:
       stage: final
       duration_min: 45
       difficulty_target: easy
-      enabled_in_v1: false
+      enabled_in_v1: true
 
 quirks:
   - id: scale-numbers-required
