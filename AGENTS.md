@@ -14,8 +14,14 @@ the owner about the conflict rather than quietly doing the reasonable-looking th
 |---|---|
 | **`AGENTS.md`** (this file) | Always, before touching code. State, rules, invariants. |
 | **`docs/TASKS.md`** | When picking up work. Step-by-step task cards, in priority order. |
+| **`RCA.md`** | Before touching prompt assembly, JPA entities, round/session state, or
+  comparability epochs. Real incidents, root causes, and the lesson each one left behind — several of the invariants below exist *because* of an entry in it. |
 | `PROJECT_PLAN.md` | For architecture, data model, and *why* decisions were made. |
 | `README.md` | To run the app or understand what it does as a user. |
+
+**When you fix a real bug or catch a documented invariant being violated, add an entry to
+`RCA.md`.** It is the one thing in this repo that survives an agent session having no
+memory of the last one.
 
 ## The five rules that matter most
 
