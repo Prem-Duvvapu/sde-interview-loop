@@ -32,6 +32,7 @@ a lesson in them.
 | 10 | 2026-08-22 → 2026-08-29 | Cost ledger recorded `$0` for every call for a week of development | Fixed | `T1` (`d8ebb97`) |
 | 11 | 2026-08-22 → 2026-08-29 | Plan specified Zustand + TanStack Query; frontend used neither, plan not corrected | Fixed (docs) | `fba203c` |
 | 12 | 2026-08-23 | Live-testing exhausted the owner's Gemini free-tier quota mid-session | Understood, not "fixable" | documented in `AGENTS.md` |
+| 13 | 2026-09-05 | `start.sh` killed a backend that had actually started, on a false readiness timeout | Fixed | `start.sh` |
 
 ---
 
@@ -379,6 +380,38 @@ card in `docs/TASKS.md` states its own live-call budget up front.
 AI agent's own verification activity is itself a cost the human owner pays for, out of a
 resource with a hard daily ceiling. **State the budget before spending it, not after
 hitting the wall.** This is now standard practice in this repo's task cards.
+
+---
+
+## 13 — `start.sh` killed a backend that had actually started, on a false readiness timeout
+
+**What happened.** The owner ran the newly-added `start.sh` for the first time. It printed
+`Backend did not report ready within 120s`, killed the backend it had just launched, and
+exited. The backend's own log, read afterward, showed `Started InterviewLoopApplication`
+at ~87 seconds — well inside the 120s budget — immediately followed, within the same
+second, by a graceful-shutdown sequence.
+
+**Root cause.** The readiness loop polled the redirected backend log file for the literal
+string `Started InterviewLoopApplication`. `./mvnw spring-boot:run` forks the app into a
+child JVM and pipes that child's output back through Maven's own console before it reaches
+the shell redirect; that pipe can sit unflushed for tens of seconds, especially under
+system load, before the line is actually written to the log file the script was grep-ping.
+The script's own `SIGTERM` — sent because it had already concluded the backend failed — is
+what forced the buffered output to flush, which is why the "Started" line and the shutdown
+lines appear within the same timestamp in the log: the app had been up the whole time, the
+log file just hadn't caught up.
+
+**Fix.** Poll the actual HTTP endpoint (`curl http://localhost:8123/api/profiles`) instead
+of grepping the log file. A listening socket answering real requests is a
+buffering-independent readiness signal; log content from a forked child process is not.
+Budget also raised 120s → 150s for margin. The log file is still written and still named
+in the failure message, for when something has genuinely gone wrong.
+
+**Lesson.** A log file redirected from a process that itself forks a child (as the
+Spring Boot Maven plugin does) is not a reliable real-time signal — buffering can happen
+at a hop the script never sees, and nothing forces a flush until the buffer fills or the
+process exits. When a script's readiness check has a real running service to probe, probe
+the service itself, not a log file about it.
 
 ---
 

@@ -52,9 +52,14 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Waiting for backend to start (first boot takes ~45-60s)..."
+# Poll the real HTTP endpoint rather than grepping the log file: `spring-boot:run` forks
+# the app into a child JVM and pipes its output back through Maven's own console, which
+# can sit on "Started InterviewLoopApplication" for tens of seconds before it's actually
+# flushed to the redirected log — long enough to trip a log-based timeout on an app that
+# is, in reality, already up and serving.
 READY=0
-for _ in $(seq 1 120); do
-  if grep -q "Started InterviewLoopApplication" "$BACKEND_LOG" 2>/dev/null; then
+for _ in $(seq 1 150); do
+  if curl -s -o /dev/null --max-time 2 "http://localhost:8123/api/profiles"; then
     READY=1
     break
   fi
@@ -67,7 +72,7 @@ for _ in $(seq 1 120); do
 done
 
 if [ "$READY" -ne 1 ]; then
-  echo "Backend did not report ready within 120s. Check $BACKEND_LOG" >&2
+  echo "Backend did not respond on :8123 within 150s. Check $BACKEND_LOG" >&2
   exit 1
 fi
 
