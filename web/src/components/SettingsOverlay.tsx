@@ -173,7 +173,7 @@ export function SettingsOverlay({ open, onClose }: Props) {
               </p>
               <p className="notice-body">
                 {load.offline
-                  ? 'Start the Spring Boot app on localhost:8080, then reopen settings.'
+                  ? 'Start the Spring Boot app on localhost:8123, then reopen settings.'
                   : load.unavailable
                     ? 'This screen will start working as soon as /api/providers ships. Nothing else is affected.'
                     : load.message}

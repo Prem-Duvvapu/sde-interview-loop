@@ -14,9 +14,13 @@
 # Code — that is tooling, unrelated to which model the product itself calls.)
 #
 # MODEL IDs: Gemini and Anthropic entries are filled in with verified current models
-# (checked 2026-08-22). OpenAI and DeepSeek are left as <set-me> rather than guessed —
-# vendor model IDs change often, so copy the current one from that vendor's own docs
-# when you add its key.
+# (checked 2026-08-22); OpenRouter with a verified current model (checked 2026-09-05).
+# OpenAI and DeepSeek (direct) are left as <set-me> rather than guessed — vendor model IDs
+# change often, so copy the current one from that vendor's own docs when you add its key.
+#
+# OPENROUTER IS A NAMED EXCEPTION to "adapters use the vendor's own SDK" (see AGENTS.md
+# "Stack"): it's a third-party proxy, not a vendor's own endpoint. Kept anyway because it
+# reaches DeepSeek (and other models) with one key. See its entry below for the full note.
 
 defaults:
   # The evaluator is PINNED for score comparability (see PROJECT_PLAN.md §1.5).
@@ -114,6 +118,37 @@ providers:
     pricing_usd_per_mtok:
       input: <set-me>
       output: <set-me>
+
+  - id: openrouter
+    display_name: OpenRouter
+    enabled: true                   # available as an alternative interviewer, not the default
+    api_key_env: OPENROUTER_API_KEY
+    sdk: >
+      OpenAI official Java SDK (com.openai:openai-java), pointed at OpenRouter's base URL
+      (https://openrouter.ai/api/v1) instead of OpenAI's. OpenRouter is a third-party
+      proxy, not a vendor's own endpoint — requests go to OpenRouter's infrastructure,
+      which then routes to whichever model you asked for. This is a deliberate, documented
+      exception to the "vendor's own SDK" rule elsewhere in this file (see AGENTS.md
+      "Stack"), chosen so DeepSeek models are reachable with one OpenRouter key instead of
+      a direct DeepSeek key.
+    models:
+      - id: deepseek/deepseek-v3.2
+        role_hint: interviewer
+        notes: >
+          Verified current on openrouter.ai/deepseek as of 2026-09-05. Supports
+          tools/tool_choice; ~164K context window. OpenRouter's model catalog (and IDs)
+          change often — check openrouter.ai/deepseek before relying on this, and swap in
+          any other OpenRouter-hosted model id the same way (not limited to DeepSeek).
+    capabilities:
+      streaming: true
+      tool_use: true
+      prompt_caching: automatic     # OpenRouter/DeepSeek automatic prefix caching
+      vision: false
+    pricing_usd_per_mtok:
+      # deepseek/deepseek-v3.2 on OpenRouter, checked 2026-09-05. Re-check per model — this
+      # varies a lot across OpenRouter's catalog.
+      input: 0.2088
+      output: 0.3096
 
 # Capability floor enforced at the provider SPI boundary.
 # A provider failing these is either shimmed (degraded, flagged in the UI) or blocked

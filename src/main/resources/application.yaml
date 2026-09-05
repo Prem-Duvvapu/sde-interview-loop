@@ -1,5 +1,7 @@
 server:
-  port: 8080
+  # Deliberately non-default — this machine runs several unrelated Spring Boot projects
+  # that all default to 8080, and port collisions between them have bitten us before.
+  port: 8123
 
 spring:
   application:

@@ -1,11 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND = 'http://localhost:8123';
 
 /**
- * Dev server proxies /api and /ws to the Spring Boot app on :8080, so the
+ * Dev server proxies /api and /ws to the Spring Boot app on :8123, so the
  * browser only ever talks to one origin and CORS never enters the picture.
+ *
+ * Both ports are deliberately non-default (not 8080/5173) — this machine runs several
+ * unrelated projects that default to those, and collisions between them have bitten us
+ * before.
  *
  * The backend is frequently not running (it is built by a different agent /
  * started by hand). A proxy error must therefore never take the dev server
@@ -15,7 +19,7 @@ const BACKEND = 'http://localhost:8080';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 5273,
     strictPort: true,
     proxy: {
       '/api': {

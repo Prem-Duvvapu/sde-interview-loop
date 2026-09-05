@@ -340,15 +340,21 @@ Bank sizes today: DSA 11, LLD 5, HLD 4, Java deep-dive 6 scenarios, CSF 2 topic 
 ## Running it
 
 ```bash
-# Backend (port 8080) — needs GEMINI_API_KEY in the environment
+# Backend (port 8123) — needs GEMINI_API_KEY in the environment
 ./mvnw spring-boot:run
 
-# Frontend (port 5173, proxies /api and /ws to 8080)
+# Frontend (port 5273, proxies /api and /ws to 8123)
 cd web && npm install && npm run dev
 ```
 
-Open http://localhost:5173. First backend boot takes ~45-60s (Flyway + JPA bootstrap);
+Ports are deliberately non-default (not 8080/5173) — this machine runs several unrelated
+projects that default to those.
+
+Open http://localhost:5273. First backend boot takes ~45-60s (Flyway + JPA bootstrap);
 it is ready when the log says `Started InterviewLoopApplication`.
+
+Or use `./start.sh` (plain) / `./start-docker.sh` (Docker Compose, backend :8123, frontend
+:8130) to run both at once.
 
 ```bash
 ./mvnw test          # 38 tests, all passing
@@ -423,7 +429,8 @@ The owner's key is an `export` in `~/.zshrc`, not a `.env` file. Either works �
 - Never put timestamps, per-request IDs, or phase/timing data into `persona()` or
   `problemBlock()`. See invariant 1.
 - Never switch a provider adapter to an OpenAI-compatible shim. Each adapter uses its
-  vendor's own SDK deliberately.
+  vendor's own SDK deliberately. **Named exception: `openrouter`** — see "Stack" below;
+  it's a documented, deliberate call, not a default to repeat for the next provider.
 - Never propose a paid service, a new vendor, or a new subscription. See Hard constraints.
 - Never run repeated live LLM calls to "make sure" — the owner's free tier is 20
   requests/day per model.
@@ -502,6 +509,17 @@ once the database container was dropped (see `PROJECT_PLAN.md` §1.1).
 Every provider adapter uses that vendor's own official SDK — never an OpenAI-compatible
 shim pointed at a different vendor, which silently loses provider-specific features.
 Claude's is `com.anthropic:anthropic-java`; Gemini's is `com.google.genai:google-genai`.
+
+**Named, deliberate exception: `openrouter`.** OpenRouter is a third-party proxy, not a
+model vendor's own endpoint — a request "for DeepSeek via OpenRouter" goes to OpenRouter's
+infrastructure, not DeepSeek's, using an OpenRouter key rather than a DeepSeek one. Built
+anyway (2026-09-05, owner's explicit choice, after being asked to confirm) so DeepSeek
+models are reachable with one OpenRouter key instead of a direct DeepSeek key. Uses OpenAI's
+official Java SDK (`com.openai:openai-java`) pointed at OpenRouter's base URL
+(`https://openrouter.ai/api/v1`) — the integration path OpenRouter's own docs recommend,
+since its API is OpenAI-compatible. This does not license adding further shim-based
+providers by default; treat each one as its own decision. See `config/providers.yaml`'s
+`openrouter` entry and `OpenRouterAdapter` for the full reasoning.
 
 Prompt-caching mechanisms differ sharply between providers (Gemini uses TTL-based cached
 content objects with a token floor; Anthropic uses inline breakpoints). A cache strategy

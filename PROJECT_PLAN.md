@@ -48,9 +48,10 @@ Beyond the plan as originally written, two things were added that it did not ant
   from real interview data remains the highest-value thing the owner can do, and nothing
   blocks it.
 - **`config/providers.yaml`** — the multi-provider LLM and voice configuration from
-  DM-5/DM-1. Gemini and Claude have working adapters; OpenAI and DeepSeek remain stubbed
-  with `<set-me>` model IDs and no adapter. Model IDs are left blank rather than guessed,
-  since vendor IDs change often and a wrong one fails at runtime.
+  DM-5/DM-1. Gemini, Claude, and OpenRouter (added 2026-09-05, reaches DeepSeek models —
+  see §1.5) have working adapters; OpenAI and DeepSeek (direct) remain stubbed with
+  `<set-me>` model IDs and no adapter. Model IDs are left blank rather than guessed, since
+  vendor IDs change often and a wrong one fails at runtime.
 - **`question-bank/`** — added during Phases 2–5. All content is original prose written
   for this project (see D-5, now resolved).
 
@@ -330,6 +331,13 @@ interface LlmProvider {
 - **Adapters use each vendor's official SDK** — never an OpenAI-compatible shim pointed
   at a different vendor, which silently loses provider-specific features. Gemini's Java
   SDK coordinates should be confirmed when that adapter is built rather than assumed.
+  **Named, deliberate exception: `openrouter`.** OpenRouter is a third-party proxy, not a
+  model vendor's own endpoint — a request "for DeepSeek via OpenRouter" goes to
+  OpenRouter's infrastructure, not DeepSeek's. Built anyway (2026-09-05, owner's explicit
+  choice) so DeepSeek models are reachable with one OpenRouter key rather than a direct
+  DeepSeek key. Uses OpenAI's official Java SDK pointed at OpenRouter's base URL — the
+  integration path OpenRouter's own docs recommend, since its API is OpenAI-compatible.
+  See `config/providers.yaml`'s `openrouter` entry for the full note.
 - **Keys are local and server-side only.** Read from `.env` / local config, never
   committed, never sent to the browser. A provider with no key present simply does not
   appear in the UI — no errors, no configuration ceremony.
@@ -679,9 +687,11 @@ Two practical notes for whoever extends the banks:
   trees, graphs (Dijkstra), backtracking, DP, and tries (11 questions). Remaining gaps
   worth filling: stack/monotonic-stack, union-find, and two-pointer patterns.
 
-**D-8 — Which providers ship first. Resolved: Gemini, then Claude.** Both adapters are
-built and both stream genuinely. OpenAI and DeepSeek remain configured-but-stubbed in
-`config/providers.yaml` with no adapter; adding one is additive against the frozen SPI.
+**D-8 — Which providers ship first. Resolved: Gemini, then Claude, then OpenRouter.** All
+three adapters are built and stream genuinely (OpenRouter added 2026-09-05, reaching
+DeepSeek models — a named exception to "vendor's own SDK", see §1.5). OpenAI and DeepSeek
+(direct) remain configured-but-stubbed in `config/providers.yaml` with no adapter; adding
+one is additive against the frozen SPI.
 
 ### 5.3 Still open
 

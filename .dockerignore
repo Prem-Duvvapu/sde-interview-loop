@@ -1,0 +1,12 @@
+.git/
+.idea/
+.claude/
+target/
+data/
+*.mv.db
+*.trace.db
+web/node_modules/
+web/dist/
+.env
+.env.*
+!.env.example

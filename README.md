@@ -17,19 +17,33 @@ Single user, runs locally, bring your own API key.
 # 1. Set your key (or export it in your shell profile)
 export GEMINI_API_KEY=your-key-here
 
-# 2. Backend — port 8080
+# 2. Backend — port 8123
 ./mvnw spring-boot:run
 
-# 3. Frontend — port 5173, in a second terminal
+# 3. Frontend — port 5273, in a second terminal
 cd web && npm install && npm run dev
 ```
 
-Open **http://localhost:5173**.
+Open **http://localhost:5273**.
+
+Both ports are deliberately non-default (not 8080/5173) to avoid clashing with other
+projects on the same machine.
 
 First backend boot takes ~45–60s (Flyway migration + JPA bootstrap). It is ready when the
 log prints `Started InterviewLoopApplication`.
 
 You can also add or switch API keys from the settings UI at runtime — no restart needed.
+
+### Or, one command
+
+```bash
+./start.sh          # runs both, using Java/Node already on this machine
+./start-docker.sh    # builds and runs both in Docker (backend :8123, frontend :8130)
+```
+
+`start.sh` reads `.env` (copy `.env.example`) if present, otherwise falls back to whatever
+is already exported in your shell. `start-docker.sh` requires Docker with the Compose
+plugin, and will create `.env` from the example for you on first run.
 
 ---
 
@@ -64,7 +78,7 @@ flowchart TB
 
   REST --> Transport
   WS --> Transport
-  LLM <--> Providers[Your provider keys\nGemini default · Claude alternative]
+  LLM <--> Providers[Your provider keys\nGemini default · Claude/OpenRouter alternative]
   Session <--> DB[(Embedded H2\nFlyway schema)]
   Eval <--> DB
 ```

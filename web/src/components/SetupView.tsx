@@ -115,7 +115,7 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
             <p className="notice-body">
               {load.offline ? (
                 <>
-                  Start the Spring Boot app on <code>localhost:8080</code>, then retry. The dev server
+                  Start the Spring Boot app on <code>localhost:8123</code>, then retry. The dev server
                   proxies <code>/api</code> and <code>/ws</code> to it.
                 </>
               ) : (

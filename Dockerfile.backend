@@ -1,0 +1,28 @@
+# Backend image — Spring Boot app, port 8123.
+# Build context must be the repo root (see docker-compose.yml).
+
+FROM maven:3.9.9-eclipse-temurin-17 AS build
+WORKDIR /app
+COPY pom.xml .
+# Warm the dependency cache in its own layer so code-only changes don't re-download.
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q -DskipTests package
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+
+# Data, not code — read from the filesystem at startup (app.profiles-dir,
+# app.question-bank-dir, app.providers-config in application.yaml), not bundled in the
+# jar. Must sit alongside app.jar in the container's working directory.
+COPY company-profiles ./company-profiles
+COPY config ./config
+COPY question-bank ./question-bank
+
+# H2 file DB lives here (jdbc:h2:file:./data/interview-loop) — mount a volume over this
+# in docker-compose.yml so it survives container recreation.
+RUN mkdir -p /app/data
+
+EXPOSE 8123
+ENTRYPOINT ["java", "-jar", "app.jar"]

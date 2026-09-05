@@ -49,7 +49,7 @@ export function describeError(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.kind) {
       case 'offline':
-        return 'Backend not reachable on localhost:8080.';
+        return 'Backend not reachable on localhost:8123.';
       case 'unavailable':
         return 'This endpoint is not implemented on the backend yet.';
       case 'parse':

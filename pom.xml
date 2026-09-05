@@ -22,6 +22,7 @@
         <java.version>17</java.version>
         <anthropic-java.version>2.57.0</anthropic-java.version>
         <google-genai.version>1.66.0</google-genai.version>
+        <openai-java.version>4.58.0</openai-java.version>
         <json-schema-validator.version>1.5.6</json-schema-validator.version>
     </properties>
 
@@ -84,6 +85,16 @@
             <groupId>com.google.genai</groupId>
             <artifactId>google-genai</artifactId>
             <version>${google-genai.version}</version>
+        </dependency>
+        <!--
+          Used for the OpenRouter adapter, pointed at OpenRouter's base URL rather than
+          OpenAI's. This is a deliberate, documented exception to "every adapter uses the
+          vendor's own SDK" — see AGENTS.md's "Stack" section.
+        -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>${openai-java.version}</version>
         </dependency>
 
         <!-- Reactive streams for LLM streaming -->

@@ -86,7 +86,7 @@ export function ReplayView({ roundId, onExit }: Props) {
             <p className="notice-title">
               {state.offline ? 'Backend is not running.' : `Could not load round #${roundId}.`}
             </p>
-            <p className="notice-body">{state.offline ? 'Start the app on localhost:8080 and try again.' : state.message}</p>
+            <p className="notice-body">{state.offline ? 'Start the app on localhost:8123 and try again.' : state.message}</p>
           </div>
         </div>
       )}
