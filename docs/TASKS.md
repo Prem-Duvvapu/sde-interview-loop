@@ -80,10 +80,14 @@ transition are exactly the class of bug that curl cannot see.
    here, link the two rather than fixing it in this card.)
 
 ### Acceptance criteria
-- [ ] All four views function with no console errors at the widths tested.
+- [ ] All four views function with no console errors at the widths tested. (Setup,
+      Interview, Dashboard confirmed clean; Replay not yet reached.)
 - [ ] A `full_loop` session advances from round 1 to round 2 unattended, in the browser.
+      (Backend-side advance logic confirmed correct via logs; browser-side render of the
+      transition not yet observed — see Findings.)
 - [ ] Replay is confirmed either working, or broken with a written, reproducible failure.
-- [ ] Findings are written down (append to this task's section, or a linked note) —
+      (Not yet reached.)
+- [x] Findings are written down (append to this task's section, or a linked note) —
       this is a verification task; a silent pass/fail defeats the point.
 
 ### Pitfalls
@@ -92,6 +96,70 @@ transition are exactly the class of bug that curl cannot see.
   actual disconnect-recovery fix to H4 even if you spot the gap here.
 - One full round and one full-loop transition is enough live-call budget. Do not repeat
   attempts to "be sure."
+
+### Findings (2026-09-05)
+Verified with a real Chromium browser (Playwright driver) against a locally-running
+backend + Vite dev server, `linkedin` profile, `full_loop` mode. Partial — ran out of
+live-call budget (Gemini free-tier quota, both `gemini-3.7-flash` and `gemini-3.6-flash`,
+exhausted mid-session) before reaching Replay or the disconnect/reconnect test.
+
+- **Setup screen, 1440px / 1080px / 375px — clean.** No overlap, clipping, or console
+  errors at any of the three widths. Profile list, detail panel, loop table (including the
+  now-enabled 5th "behavioral / Host-culture" row), mode toggle, module/difficulty
+  selects, and the replay form all render correctly, including at 375px where the layout
+  has no dedicated breakpoint below 780px.
+- **Live round through the UI — confirmed working.** Streaming interviewer text, the
+  phase strip (Briefing → Clarifying → Approach → Coding → Complexity → Edge Cases →
+  Follow Up → Wrap), and tool-call activity all render live. Control calls
+  (`record_signal`, `end_round`) show up as their own inline transcript entries with
+  `dimension=`/`score=`/`evidence=` fields — a real behavior worth knowing about, not a
+  bug: it means the transcript pane doubles as a scoring-activity log, which is more
+  detail than a candidate-facing view probably wants long-term (worth a product decision
+  later, not fixed here).
+- **Full-loop round 1→2 transition — NOT confirmed end-to-end; found a real UX gap.**
+  Round 1 completed naturally via `end_round` (confirmed: phase strip all-ticked, "Round
+  complete" banner, composer replaced with "This round is finished"). But round 2 never
+  appeared in the browser within a 20s wait. Backend-log cross-reference shows the
+  full-loop advance logic itself is correct — `Prepared full-loop round 69 after completed
+  round 68` was logged — but only after the evaluator's first call timed out (60s), its
+  retry failed with `429 RESOURCE_EXHAUSTED` (quota), and the fallback-to-neutral-handoff
+  path ran — a sequence taking roughly 90s, blocking the same thread the whole time. My
+  test's browser had already moved on by then, so `next_round_ready` most likely landed on
+  an already-closing socket (`WebSocket disconnected: ... reason=client navigating away`
+  logged immediately after). **Net finding: if the evaluator is slow or fails, a real user
+  sees up to ~90s of silent dead air after "Round complete" with zero progress indicator**
+  — screenshot confirms the UI just sits at "This round is finished," no spinner, no
+  message. The acceptance criterion "advances from round 1 to round 2 unattended" is
+  therefore *not yet confirmed* for the happy path (fast evaluator, no quota issues) —
+  needs a re-run once quota resets, with a longer wait and a working evaluator. Worth an
+  `RCA.md`/backlog entry for a "preparing round 2…" indicator independent of any actual fix.
+- **Dashboard — clean, no console errors, no literal `NaN`/`undefined`.** Shows "Not
+  enough data" for current readiness (expected — no scored rounds yet), correct session
+  counts, and a session-history list. The open session's report panel correctly reads
+  "Report unavailable: the report is not available yet. Evaluation may still be
+  finishing" — consistent with the evaluator backlog above, not a bug.
+- **Replay and disconnect/reconnect (steps 6–7) — not reached.** Ran out of live-call
+  budget; both Gemini models configured this session hit their daily free-tier cap before
+  getting here. Remains open.
+- **Unresolved, low-confidence: intermittent "Maximum update depth exceeded" React
+  warning** plus a burst of 9× HTTP 404s, seen in 2 of ~7 live attempts entering the
+  interview view for a full-loop DSA round. Never seen on the Setup screen alone. Isolated
+  resize-only and screenshot-only diagnostic runs (3/3 each) didn't reproduce it, so the
+  trigger is still unknown — flagging as open rather than dismissing it. No confirmed
+  functional impact: turns sent and interviewer replies arrived correctly in runs both
+  with and without the warning.
+- **Test-design note, not an app bug:** my scripted candidate answers assumed a
+  "contains-nearby-duplicate" array problem, but the round actually assigned was "Lowest
+  Common Ancestor in a Binary Tree" — a different DSA question entirely. The evaluator
+  correctly scored the mismatched answers as a failure (`score=1` across all signals,
+  `end_round reason=Candidate repeatedly refused/failed to engage with the problem`) and
+  ended the round for a legitimate reason. This still exercised and confirmed real
+  `end_round` triggering and phase-strip completion — just not via a "candidate finished
+  cleanly" path.
+
+Related: the round-2-transition dead-air gap is a UX/observability issue, distinct from
+H4's disconnect-recovery gap (which is about the frontend recovering after losing the WS
+connection entirely, not about a slow-but-still-connected evaluator). Track separately.
 
 ---
 
