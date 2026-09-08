@@ -322,6 +322,7 @@ kbd {
 }
 .profile-item:hover { background: var(--panel); }
 .profile-item.is-selected { background: var(--panel-2); border-color: var(--accent-line); }
+.profile-item-general { margin-bottom: 6px; border-color: var(--line-soft); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
 .profile-name { font-weight: 500; }
 .profile-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .profile-meta code { color: var(--dim); }
@@ -331,6 +332,7 @@ kbd {
 .detail-head h2 { font-size: 17px; text-transform: none; letter-spacing: -0.01em; color: var(--text-strong); }
 .detail-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .calibration-note { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.general-practice-note { max-width: 68ch; color: var(--muted); line-height: 1.65; }
 
 .detail-section { margin-top: 26px; }
 .detail-section h3 {

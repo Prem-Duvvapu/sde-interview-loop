@@ -6,12 +6,14 @@ import com.premd.interviewloop.domain.SessionRound;
 import com.premd.interviewloop.domain.enums.ModuleType;
 import com.premd.interviewloop.domain.enums.SessionMode;
 import com.premd.interviewloop.evaluation.RoundEvaluator;
+import com.premd.interviewloop.session.GeneralPractice;
 import com.premd.interviewloop.session.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -32,12 +34,16 @@ public class SessionController {
 
     @PostMapping
     public ResponseEntity<InterviewSession> createSession(@RequestBody Map<String, String> body) {
-        String companyProfileId = body.get("companyProfileId");
+        String companyProfileId = GeneralPractice.normalizeId(body.get("companyProfileId"));
         String modeStr = body.getOrDefault("mode", "single_module");
         String providerId = body.getOrDefault("providerId", "google");
         String modelId = body.get("modelId");
 
         SessionMode mode = "full_loop".equals(modeStr) ? SessionMode.FULL_LOOP : SessionMode.SINGLE_MODULE;
+        if (mode == SessionMode.FULL_LOOP && GeneralPractice.isGeneralPractice(companyProfileId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "General practice is a single-module mock; choose a company to run a full loop");
+        }
 
         InterviewSession session;
         if (mode == SessionMode.SINGLE_MODULE) {

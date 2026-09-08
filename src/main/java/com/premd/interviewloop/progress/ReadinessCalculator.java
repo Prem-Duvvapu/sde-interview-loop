@@ -5,6 +5,7 @@ import com.premd.interviewloop.domain.enums.ReadinessBand;
 import com.premd.interviewloop.domain.repository.ReadinessSnapshotRepository;
 import com.premd.interviewloop.profile.CompanyProfile;
 import com.premd.interviewloop.profile.ProfileLoader;
+import com.premd.interviewloop.session.GeneralPractice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -75,6 +76,9 @@ public class ReadinessCalculator {
      * retained for historical display but are not a compatible input to the current readiness.
      */
     public ReadinessResult computeReadiness(String companyProfileId, int comparabilityEpoch) {
+        if (GeneralPractice.isGeneralPractice(companyProfileId)) {
+            return computeGeneralPracticeReadiness(companyProfileId, comparabilityEpoch);
+        }
         CompanyProfile profile;
         try {
             profile = profileLoader.getProfile(companyProfileId);
@@ -165,6 +169,43 @@ public class ReadinessCalculator {
                 confidence,
                 totalSamples,
                 null);
+    }
+
+    /** General practice has no company weights or gates, so aggregate its module scores evenly. */
+    private ReadinessResult computeGeneralPracticeReadiness(String companyProfileId, int comparabilityEpoch) {
+        Instant now = Instant.now();
+        Map<String, List<ReadinessSnapshot>> snapshotsByModule = new LinkedHashMap<>();
+        snapshotRepo.findByCompanyProfileIdOrderByTakenAtDesc(companyProfileId).stream()
+                .filter(snapshot -> snapshot.getComparabilityEpoch() == comparabilityEpoch)
+                .forEach(snapshot -> snapshotsByModule
+                        .computeIfAbsent(snapshot.getModuleType(), ignored -> new java.util.ArrayList<>())
+                        .add(snapshot));
+
+        if (snapshotsByModule.isEmpty()) {
+            return ReadinessResult.unavailable("No snapshots recorded yet");
+        }
+
+        Map<String, Double> moduleScores = new LinkedHashMap<>();
+        Map<String, Integer> moduleSampleCounts = new LinkedHashMap<>();
+        int totalSamples = 0;
+        for (Map.Entry<String, List<ReadinessSnapshot>> entry : snapshotsByModule.entrySet()) {
+            double weightedSum = 0;
+            double totalWeight = 0;
+            for (ReadinessSnapshot snapshot : entry.getValue()) {
+                double weight = decayWeight(snapshot.getTakenAt(), now);
+                weightedSum += snapshot.getScore() * weight;
+                totalWeight += weight;
+            }
+            moduleScores.put(entry.getKey(), totalWeight > 0 ? weightedSum / totalWeight : 0);
+            moduleSampleCounts.put(entry.getKey(), entry.getValue().size());
+            totalSamples += entry.getValue().size();
+        }
+
+        double overallScore = moduleScores.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        ReadinessBand band = ReadinessBand.fromScore(overallScore);
+        String confidence = totalSamples >= 3 ? "confident" : "low";
+        return new ReadinessResult(band.wireValue(), overallScore, moduleScores, moduleSampleCounts,
+                Map.of(), confidence, totalSamples, null);
     }
 
     /**

@@ -24,7 +24,7 @@ interviewer against a real LLM, and scored into a report when it ends.
 | 3 | LLD module | **done** |
 | 4 | HLD module + design graph surface | **done** |
 | 5 | CS fundamentals + Java deep-dive modules | **done** |
-| 6 | Company-calibrated full loop (round chaining) | **implemented** — ordered rounds, evaluator handoff, disabled-round notices, responsive transition UI |
+| 6 | Company-calibrated full loop (round chaining) | **implemented** — ordered rounds, evaluator handoff, disabled-round notices, responsive transition UI; general practice is intentionally single-module only |
 | 7 | Evaluation, reports, dashboard, replay | **implemented** — per-round evaluation, session reports, readiness rollups/trends, dashboard and replay entry points |
 | 8 | Voice mode | **browser-native foundation implemented** — opt-in text-to-speech and editable microphone dictation; optional provider upgrades remain |
 | 9 | Polish and hardening | not started |

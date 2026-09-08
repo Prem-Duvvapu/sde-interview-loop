@@ -187,6 +187,24 @@ class TurnOrchestratorIntegrationTest {
     }
 
     @Test
+    void generalPracticeSession_hasNoCompanyProfileButStillBuildsRoundContext() {
+        InterviewSession session = sessionManager.createSingleModuleSession(
+                GeneralPractice.ID, ModuleType.DSA, "medium", MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        SessionRound round = session.getRounds().get(0);
+
+        RoundContext context = contextFactory.build(round.getId(), 0);
+
+        assertThat(session.getProfileContentHash()).isEqualTo(GeneralPractice.CONTENT_VERSION);
+        assertThat(context.companyProfileId()).isEqualTo(GeneralPractice.ID);
+        assertThat(context.companyDisplayName()).isNull();
+        assertThat(context.targetRoleTitle()).isNull();
+        assertThatThrownBy(() -> sessionManager.createSession(
+                GeneralPractice.ID, SessionMode.FULL_LOOP, MOCK_PROVIDER_ID, MOCK_MODEL_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("single module");
+    }
+
+    @Test
     void testHappyPathCandidateTurn_advancesPhaseAndPersistsLedger() {
         // 1. Create a session and start a DSA round
         InterviewSession session = sessionManager.createSingleModuleSession(

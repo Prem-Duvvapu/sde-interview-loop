@@ -11,6 +11,7 @@ import { ReplayView } from './components/ReplayView';
 import { DashboardView } from './components/DashboardView';
 import { SettingsOverlay } from './components/SettingsOverlay';
 import { BrowserVoiceProvider, plainTextForSpeech } from './voice/VoiceProvider';
+import { GENERAL_PRACTICE_LABEL, isGeneralPractice } from './lib/generalPractice';
 
 type View =
   | { kind: 'setup' }
@@ -276,7 +277,8 @@ export function App() {
 
   const handleStart = useCallback(
     async (opts: {
-      profile: CompanyProfile;
+      profile: CompanyProfile | null;
+      profileId: string;
       mode: SessionModeId;
       moduleType: ModuleTypeId;
       difficultyTarget: string;
@@ -285,7 +287,7 @@ export function App() {
       setStartError(null);
       try {
         const created = await createSession({
-          companyProfileId: opts.profile.id,
+          companyProfileId: opts.profileId,
           mode: opts.mode,
           moduleType: opts.moduleType,
           difficultyTarget: opts.difficultyTarget,
@@ -408,8 +410,9 @@ export function App() {
   }, [voice]);
 
   useEffect(() => {
-    document.title = view.kind === 'interview' && profile ? `${profile.displayName ?? profile.id} · Interview Loop` : 'SDE Interview Loop';
-  }, [view.kind, profile]);
+    const context = profile?.displayName ?? (session && isGeneralPractice(session.companyProfileId) ? GENERAL_PRACTICE_LABEL : null);
+    document.title = view.kind === 'interview' && context ? `${context} · Interview Loop` : 'SDE Interview Loop';
+  }, [view.kind, profile, session]);
 
   // ------------------------------------------------------------ render
 

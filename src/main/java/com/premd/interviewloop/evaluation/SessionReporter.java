@@ -15,6 +15,7 @@ import com.premd.interviewloop.domain.repository.SessionRoundRepository;
 import com.premd.interviewloop.domain.repository.InterviewSessionRepository;
 import com.premd.interviewloop.profile.CompanyProfile;
 import com.premd.interviewloop.profile.ProfileLoader;
+import com.premd.interviewloop.session.GeneralPractice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -152,6 +153,10 @@ public class SessionReporter {
     private double computeOverallScore(String companyProfileId, Map<String, Double> perModuleScores) {
         if (perModuleScores.isEmpty()) {
             return 0;
+        }
+
+        if (GeneralPractice.isGeneralPractice(companyProfileId)) {
+            return perModuleScores.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
         }
 
         try {

@@ -18,6 +18,7 @@ import type {
 } from '../api/types';
 import { formatIsoTime, titleCase } from '../lib/format';
 import { MODULE_LABELS, isModuleType } from '../lib/phases';
+import { GENERAL_PRACTICE_PROFILE, isGeneralPractice } from '../lib/generalPractice';
 
 interface Props {
   onExit: () => void;
@@ -51,8 +52,11 @@ export function DashboardView({ onExit, onReplay, onOpenSettings }: Props) {
         if (cancelled) return;
         const safeProfiles = Array.isArray(profiles) ? profiles : [];
         const safeSessions = Array.isArray(sessions) ? sessions : [];
-        setInitial({ phase: 'ready', profiles: safeProfiles, sessions: safeSessions });
-        setProfileId((current) => current || safeProfiles[0]?.id || '');
+        const contexts = safeSessions.some((session) => isGeneralPractice(session.companyProfileId))
+          ? [...safeProfiles, GENERAL_PRACTICE_PROFILE]
+          : safeProfiles;
+        setInitial({ phase: 'ready', profiles: contexts, sessions: safeSessions });
+        setProfileId((current) => current || contexts[0]?.id || '');
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -180,7 +184,7 @@ export function DashboardView({ onExit, onReplay, onOpenSettings }: Props) {
         <main className="dashboard-body">
           <div className="dashboard-filter">
             <label className="field" htmlFor="dashboard-company">
-              <span className="field-label">Company</span>
+              <span className="field-label">Practice context</span>
               <select id="dashboard-company" className="select" value={profileId} onChange={(event) => setProfileId(event.target.value)}>
                 {profiles.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.displayName ?? candidate.id}</option>)}
               </select>
@@ -236,7 +240,7 @@ export function DashboardView({ onExit, onReplay, onOpenSettings }: Props) {
           <section className="dashboard-lower">
             <div className="dashboard-section session-history">
               <div className="section-title"><h2>Session history</h2><span>{profileSessions.length} sessions</span></div>
-              {profileSessions.length === 0 && <div className="empty-state"><p className="empty-title">No sessions for this company.</p><p className="empty-body">Start a practice round from the setup screen.</p></div>}
+              {profileSessions.length === 0 && <div className="empty-state"><p className="empty-title">No sessions for this practice context.</p><p className="empty-body">Start a practice round from the setup screen.</p></div>}
               <div className="session-list">
                 {profileSessions.map((session) => <article className={`session-card${selectedSessionId === session.id ? ' is-selected' : ''}`} key={session.id}>
                   <button type="button" className="session-select" onClick={() => setSelectedSessionId(session.id)}>

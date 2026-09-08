@@ -3,10 +3,12 @@ import { describeError, listProfiles, ApiError } from '../api/client';
 import type { CompanyProfile, ModuleTypeId, SessionModeId } from '../api/types';
 import { MODULE_LABELS, RUNNABLE_MODULES, isModuleType } from '../lib/phases';
 import { titleCase } from '../lib/format';
+import { GENERAL_PRACTICE_ID, GENERAL_PRACTICE_LABEL, isGeneralPractice } from '../lib/generalPractice';
 
 interface Props {
   onStart: (opts: {
-    profile: CompanyProfile;
+    profile: CompanyProfile | null;
+    profileId: string;
     mode: SessionModeId;
     moduleType: ModuleTypeId;
     difficultyTarget: string;
@@ -64,6 +66,7 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
   );
 
   const rounds = selected?.loop?.rounds ?? [];
+  const generalPractice = isGeneralPractice(selectedId);
 
   // Default the module and difficulty to the profile's first runnable round.
   useEffect(() => {
@@ -77,7 +80,7 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
-  const canStart = selected !== null && !starting;
+  const canStart = (selected !== null || generalPractice) && !starting;
 
   return (
     <div className="setup">
@@ -140,6 +143,20 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
             </div>
             {profiles.length === 0 && <p className="muted pad">No profiles returned by the backend.</p>}
             <ul>
+              <li>
+                <button
+                  type="button"
+                  className={`profile-item profile-item-general${generalPractice ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setSelectedId(GENERAL_PRACTICE_ID);
+                    setMode('single_module');
+                  }}
+                  aria-pressed={generalPractice}
+                >
+                  <span className="profile-name">{GENERAL_PRACTICE_LABEL}</span>
+                  <span className="profile-meta"><span>No company calibration</span></span>
+                </button>
+              </li>
               {profiles.map((p) => (
                 <li key={p.id}>
                   <button
@@ -160,7 +177,61 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
           </aside>
 
           <main className="profile-detail">
-            {!selected && <p className="muted pad">Select a company to see its loop.</p>}
+            {!selected && !generalPractice && <p className="muted pad">Select a company or general practice to begin.</p>}
+            {generalPractice && (
+              <>
+                <div className="detail-head">
+                  <h2>{GENERAL_PRACTICE_LABEL}</h2>
+                  <div className="detail-badges"><span className="chip chip-level">SDE-2 backend</span></div>
+                </div>
+                <p className="general-practice-note">
+                  Choose one module and difficulty without company-specific quirks, weights, or calibration.
+                  General-practice scores are tracked separately and are not a company readiness prediction.
+                </p>
+                <section className="detail-section">
+                  <h3>Start a mock interview</h3>
+                  <div className="start-controls">
+                    <div className="field">
+                      <label className="field-label" htmlFor="general-module-select">Module</label>
+                      <select
+                        id="general-module-select"
+                        className="select"
+                        value={moduleType}
+                        onChange={(e) => setModuleType(e.target.value as ModuleTypeId)}
+                      >
+                        {RUNNABLE_MODULES.map((module) => <option key={module} value={module}>{MODULE_LABELS[module]}</option>)}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label className="field-label" htmlFor="general-difficulty-select">Difficulty</label>
+                      <select
+                        id="general-difficulty-select"
+                        className="select"
+                        value={difficulty}
+                        onChange={(e) => setDifficulty(e.target.value)}
+                      >
+                        {DIFFICULTIES.map((level) => <option key={level} value={level}>{level}</option>)}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-lg"
+                      disabled={!canStart}
+                      onClick={() => onStart({
+                        profile: null,
+                        profileId: GENERAL_PRACTICE_ID,
+                        mode: 'single_module',
+                        moduleType,
+                        difficultyTarget: difficulty,
+                      })}
+                    >
+                      {starting ? 'Starting…' : 'Start mock'}
+                    </button>
+                  </div>
+                  {startError && <div className="notice notice-error compact"><p className="notice-body">{startError}</p></div>}
+                </section>
+              </>
+            )}
             {selected && (
               <>
                 <div className="detail-head">
@@ -298,7 +369,7 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
                       disabled={!canStart}
                       onClick={() =>
                         selected &&
-                        onStart({ profile: selected, mode, moduleType, difficultyTarget: difficulty })
+                        onStart({ profile: selected, profileId: selected.id, mode, moduleType, difficultyTarget: difficulty })
                       }
                     >
                       {starting ? 'Starting…' : 'Start round'}

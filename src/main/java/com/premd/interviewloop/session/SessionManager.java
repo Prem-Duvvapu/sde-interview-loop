@@ -53,6 +53,10 @@ public class SessionManager {
     @Transactional
     public InterviewSession createSession(String companyProfileId, SessionMode mode,
                                           String providerId, String modelId) {
+        companyProfileId = GeneralPractice.normalizeId(companyProfileId);
+        if (GeneralPractice.isGeneralPractice(companyProfileId)) {
+            throw new IllegalArgumentException("General practice supports a single module, not a company full loop");
+        }
         CompanyProfile profile = profileLoader.getProfile(companyProfileId);
 
         InterviewSession session = new InterviewSession(mode, companyProfileId);
@@ -99,8 +103,11 @@ public class SessionManager {
                                                        ModuleType moduleType,
                                                        String difficultyTarget,
                                                        String providerId, String modelId) {
+        companyProfileId = GeneralPractice.normalizeId(companyProfileId);
         InterviewSession session = new InterviewSession(SessionMode.SINGLE_MODULE, companyProfileId);
-        session.setProfileContentHash(profileLoader.getContentHash(companyProfileId));
+        session.setProfileContentHash(GeneralPractice.isGeneralPractice(companyProfileId)
+                ? GeneralPractice.CONTENT_VERSION
+                : profileLoader.getContentHash(companyProfileId));
 
         SessionRound round = new SessionRound(1, moduleType);
         round.setDifficultyTarget(difficultyTarget);

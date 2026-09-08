@@ -4,6 +4,7 @@ import com.premd.interviewloop.domain.ReadinessSnapshot;
 import com.premd.interviewloop.domain.repository.ReadinessSnapshotRepository;
 import com.premd.interviewloop.profile.CompanyProfile;
 import com.premd.interviewloop.profile.ProfileLoader;
+import com.premd.interviewloop.session.GeneralPractice;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -201,6 +202,22 @@ class ReadinessCalculatorTest {
         // With decay: (4.0*1.0 + 2.0*0.25) / (1.0+0.25) = 4.5/1.25 = 3.6
         assertTrue(result.overallScore() > 3.5, "Recency weighting should favour the recent high score");
         assertEquals("hire", result.band());
+    }
+
+    @Test
+    void computeReadiness_generalPracticeUsesEvenModuleMeanWithoutProfile() {
+        Instant now = Instant.now();
+        when(snapshotRepo.findByCompanyProfileIdOrderByTakenAtDesc(GeneralPractice.ID)).thenReturn(List.of(
+                snap("dsa", GeneralPractice.ID, 4.0, now),
+                snap("lld", GeneralPractice.ID, 2.0, now)));
+
+        ReadinessCalculator.ReadinessResult result = calculator.computeReadiness(GeneralPractice.ID);
+
+        assertNull(result.error());
+        assertEquals(3.0, result.overallScore(), 0.01);
+        assertEquals(2, result.totalSamples());
+        assertTrue(result.failingMinimums().isEmpty());
+        verifyNoInteractions(profileLoader);
     }
 
     // -- Helpers --

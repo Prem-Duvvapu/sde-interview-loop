@@ -115,8 +115,9 @@ The detailed package map, prompt-caching rules, and data-flow diagrams are in
 
 ## What a round looks like
 
-1. **Pick a company and a round type.** 11 company profiles ship with the repo, each with
-   its own round structure, emphasis weights, and interviewer quirks.
+1. **Pick a company, or general practice, and a round type.** 11 company profiles ship with
+   their own round structure, emphasis weights, and interviewer quirks. General SDE-2 practice
+   deliberately runs one module with no company tag, quirks, or claimed calibration.
 2. **Get interviewed.** The AI runs an explicit phase machine — for DSA that's
    `BRIEFING → CLARIFYING → APPROACH → CODING → COMPLEXITY → EDGE_CASES → FOLLOW_UP → WRAP`.
    It asks rather than tells, escalates hints only when you're genuinely stuck, and pushes
@@ -178,7 +179,8 @@ and requires explicit confirmation.
 
 **Working end to end.** All seven interviewer modules, ordered full-loop transitions,
 per-round evaluation, session reports, readiness trends/dashboard, runtime provider/key
-switching, browser-native voice controls, and the web client are built.
+switching, browser-native voice controls, untagged general-practice sessions, and the web client
+are built.
 
 **Still to harden:** browser-based full-loop walkthrough, prompt-cache measurement,
 disconnect recovery, cost ceilings, packaged startup, and optional upgraded voice providers.

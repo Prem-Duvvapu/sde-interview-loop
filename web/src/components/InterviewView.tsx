@@ -12,6 +12,7 @@ import { DiagramPane } from './DiagramPane';
 import { Composer } from './Composer';
 import { StatusBar } from './StatusBar';
 import type { VoiceProvider } from '../voice/VoiceProvider';
+import { GENERAL_PRACTICE_LABEL } from '../lib/generalPractice';
 
 interface Props {
   profile: CompanyProfile | null;
@@ -99,7 +100,7 @@ export function InterviewView(props: Props) {
         </button>
 
         <div className="topbar-title">
-          <span className="topbar-primary">{profile?.displayName ?? round.questionSlug ?? 'Interview'}</span>
+          <span className="topbar-primary">{profile?.displayName ?? GENERAL_PRACTICE_LABEL}</span>
           <span className="topbar-secondary">
             {MODULE_LABELS[moduleType]}
             {round.difficultyTarget ? ` · ${round.difficultyTarget}` : ''}
