@@ -127,6 +127,13 @@ The detailed package map, prompt-caching rules, and data-flow diagrams are in
    separate evaluator model turns them into per-dimension scores, strengths, gaps, and a
    readiness band.
 
+### Voice controls
+
+Voice mode uses the browser's built-in Web Speech API: enable **Voice on** during a round to
+read completed interviewer replies aloud, and choose **Use mic** to dictate into the normal
+editable response box. Dictation is never sent automatically, and audio never reaches this
+application's backend. Browser support varies; unsupported controls remain safely disabled.
+
 ### The seven round types
 
 | Module | Shape | Work surface | Questions |
@@ -169,12 +176,12 @@ and requires explicit confirmation.
 
 ## Project status
 
-**Working end to end.** All five interviewer modules, ordered full-loop transitions,
+**Working end to end.** All seven interviewer modules, ordered full-loop transitions,
 per-round evaluation, session reports, readiness trends/dashboard, runtime provider/key
-switching, and the web client are built.
+switching, browser-native voice controls, and the web client are built.
 
 **Still to harden:** browser-based full-loop walkthrough, prompt-cache measurement,
-disconnect recovery, cost ceilings, packaged startup, and voice mode.
+disconnect recovery, cost ceilings, packaged startup, and optional upgraded voice providers.
 
 The company profiles are all `seeded-unverified` — plausible defaults generated at setup,
 not facts. Treat their round structures and difficulty bars as a starting point to correct

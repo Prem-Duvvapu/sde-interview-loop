@@ -11,6 +11,7 @@ import { EditorPane } from './EditorPane';
 import { DiagramPane } from './DiagramPane';
 import { Composer } from './Composer';
 import { StatusBar } from './StatusBar';
+import type { VoiceProvider } from '../voice/VoiceProvider';
 
 interface Props {
   profile: CompanyProfile | null;
@@ -33,6 +34,9 @@ interface Props {
   onExit: () => void;
   onOpenSettings: () => void;
   onReconnect: () => void;
+  voice: VoiceProvider;
+  ttsEnabled: boolean;
+  onToggleTts: () => void;
 }
 
 export function InterviewView(props: Props) {
@@ -57,6 +61,9 @@ export function InterviewView(props: Props) {
     onExit,
     onOpenSettings,
     onReconnect,
+    voice,
+    ttsEnabled,
+    onToggleTts,
   } = props;
 
   const now = useTicker(1000, startedAtMs !== null && !roundComplete);
@@ -111,6 +118,16 @@ export function InterviewView(props: Props) {
           </button>
           <button
             type="button"
+            className={`btn btn-ghost btn-sm voice-toggle${ttsEnabled ? ' is-active' : ''}`}
+            onClick={onToggleTts}
+            disabled={!voice.supportsSynthesis()}
+            aria-pressed={ttsEnabled}
+            title={voice.supportsSynthesis() ? 'Read completed interviewer replies aloud' : 'Text-to-speech is not supported by this browser'}
+          >
+            {ttsEnabled ? 'Voice on' : 'Voice off'}
+          </button>
+          <button
+            type="button"
             className="btn btn-ghost btn-sm"
             onClick={onEndRound}
             disabled={roundComplete}
@@ -134,6 +151,7 @@ export function InterviewView(props: Props) {
             disabledReason={disabledReason}
             awaitingReply={awaitingReply}
             onSend={onSend}
+            voice={voice}
           />
         </div>
 

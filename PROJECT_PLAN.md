@@ -26,7 +26,7 @@ interviewer against a real LLM, and scored into a report when it ends.
 | 5 | CS fundamentals + Java deep-dive modules | **done** |
 | 6 | Company-calibrated full loop (round chaining) | **implemented** — ordered rounds, evaluator handoff, disabled-round notices, responsive transition UI |
 | 7 | Evaluation, reports, dashboard, replay | **implemented** — per-round evaluation, session reports, readiness rollups/trends, dashboard and replay entry points |
-| 8 | Voice mode | not started |
+| 8 | Voice mode | **browser-native foundation implemented** — opt-in text-to-speech and editable microphone dictation; optional provider upgrades remain |
 | 9 | Polish and hardening | not started |
 
 Beyond the plan as originally written, two things were added that it did not anticipate:
@@ -586,8 +586,11 @@ trend points retain their comparability epoch; the dashboard presents report, hi
 module scores and trends, and links into replay. Remaining hardening: anchored examples to
 reduce evaluator inflation and a browser-based replay/dashboard walkthrough.
 
-**Phase 8 — Voice mode.** Not started. Mirrors the LLM layer: a `VoiceProvider` SPI with a
-zero-key browser-native default and optional key-based upgrades. See **DM-1**.
+**Phase 8 — Voice mode.** *Browser-native foundation implemented.* A small frontend
+`VoiceProvider` boundary now supplies opt-in text-to-speech for completed interviewer replies
+and microphone dictation into the normal editable composer. Audio stays out of the application
+backend; unsupported browser controls are disabled. Optional key-based upgrades remain future
+work. See **DM-1**.
 
 **Phase 9 — Polish and hardening.** Not started. Cost controls (per-session ceiling with a
 warning threshold — see D-7), graceful API failure handling mid-round, session recovery

@@ -10,6 +10,7 @@ import { InterviewView } from './components/InterviewView';
 import { ReplayView } from './components/ReplayView';
 import { DashboardView } from './components/DashboardView';
 import { SettingsOverlay } from './components/SettingsOverlay';
+import { BrowserVoiceProvider, plainTextForSpeech } from './voice/VoiceProvider';
 
 type View =
   | { kind: 'setup' }
@@ -38,6 +39,7 @@ export function App() {
 
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [ttsEnabled, setTtsEnabled] = useState(() => window.localStorage.getItem('voice.readReplies') === 'true');
 
   /** The editor buffer. A ref on purpose — keystrokes must not re-render the transcript. */
   const bufferRef = useRef('');
@@ -48,6 +50,10 @@ export function App() {
   const sendRef = useRef<((frame: OutboundFrame) => boolean) | null>(null);
   const beginNextRoundRef = useRef<((next: SessionRound, skippedRoundOrdinals?: number[]) => Promise<void>) | null>(null);
   const reportedUnknownFramesRef = useRef<Set<string>>(new Set());
+  const currentInterviewerReplyRef = useRef('');
+  const voiceRef = useRef<BrowserVoiceProvider | null>(null);
+  if (!voiceRef.current) voiceRef.current = new BrowserVoiceProvider();
+  const voice = voiceRef.current;
 
   const pushItem = useCallback((item: ChatItem) => setItems((prev) => [...prev, item]), []);
 
@@ -83,10 +89,12 @@ export function App() {
           break;
 
         case 'turn_ack':
+          currentInterviewerReplyRef.current = '';
           setAwaitingReply(true);
           break;
 
         case 'text_delta':
+          currentInterviewerReplyRef.current += frame.text;
           setItems((prev) => {
             const last = prev[prev.length - 1];
             if (last && last.kind === 'interviewer' && last.streaming) {
@@ -108,6 +116,8 @@ export function App() {
             }
             return prev;
           });
+          if (ttsEnabled) voice.speak(plainTextForSpeech(currentInterviewerReplyRef.current));
+          currentInterviewerReplyRef.current = '';
           setAwaitingReply(false);
           break;
 
@@ -168,7 +178,7 @@ export function App() {
         }
       }
     },
-    [pushItem, pushSystem],
+    [pushItem, pushSystem, ttsEnabled, voice],
   );
 
   const socketEnabled = view.kind === 'interview' && round !== null;
@@ -216,7 +226,9 @@ export function App() {
     bufferRef.current = '';
     reportedUnknownFramesRef.current = new Set();
     startSentForRoundRef.current = null;
-  }, []);
+    currentInterviewerReplyRef.current = '';
+    voice.cancelSpeech();
+  }, [voice]);
 
   const beginNextRound = useCallback(
     async (next: SessionRound, skippedRoundOrdinals: number[] = []) => {
@@ -382,8 +394,18 @@ export function App() {
     startSentForRoundRef.current = null;
     setRound(null);
     setSession(null);
+    voice.cancelSpeech();
     setView({ kind: 'setup' });
-  }, []);
+  }, [voice]);
+
+  const handleToggleTts = useCallback(() => {
+    setTtsEnabled((enabled) => {
+      const next = !enabled;
+      window.localStorage.setItem('voice.readReplies', String(next));
+      if (!next) voice.cancelSpeech();
+      return next;
+    });
+  }, [voice]);
 
   useEffect(() => {
     document.title = view.kind === 'interview' && profile ? `${profile.displayName ?? profile.id} · Interview Loop` : 'SDE Interview Loop';
@@ -428,6 +450,9 @@ export function App() {
           onExit={handleExit}
           onOpenSettings={() => setSettingsOpen(true)}
           onReconnect={socket.reconnectNow}
+          voice={voice}
+          ttsEnabled={ttsEnabled}
+          onToggleTts={handleToggleTts}
         />
       )}
 
