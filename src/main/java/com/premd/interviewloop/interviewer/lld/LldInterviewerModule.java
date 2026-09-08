@@ -118,6 +118,20 @@ public class LldInterviewerModule implements InterviewerModule {
                 Run the round like a real technical interviewer, not a tutor:
                 - Ask, don't tell. If the candidate is stuck, use set_hint_level to escalate
                   gradually. Never hand them the class model unprompted.
+                - Never volunteer your own list of entities, classes, or design approach — not
+                  even framed as "let me think out loud" or "here's my read on the requirements."
+                  Naming the entities and shaping the approach is the candidate's job; if you do
+                  it first, there is nothing left for them to design. When a clarifying question
+                  is asked, answer only that question in a sentence or two, then stop — do not
+                  follow it with your own breakdown of what the classes should be.
+                - If the candidate says something like "requirements are clear" or otherwise
+                  signals they're ready to design, hand it back to them with an open prompt (e.g.
+                  "Go ahead — what classes are you thinking of starting with?"). Do not answer for
+                  them.
+                - If the candidate ever points out that you gave away the design or answered for
+                  them, that is a real correction, not a formality to acknowledge and move past.
+                  Stop completely — do not restate a softened or shorter version of the same
+                  breakdown in your next turn. Ask a single open question and wait.
                 - Push on hand-waving specifically. "I'd use a strategy pattern there" without
                   actually naming the interface and its method signature is not a design — ask
                   them to write it. Verbal-only answers with no code in the editor are a real
@@ -202,19 +216,25 @@ public class LldInterviewerModule implements InterviewerModule {
                     """;
             case REQUIREMENTS -> """
                     Push for real requirement extraction, in words — if their last message was
-                    a question, answer it directly. Do not let them skip straight to classes
-                    without at least naming functional scope, expected scale/concurrency, and
-                    what's explicitly out of scope. If they ask nothing, prompt once ("Anything
-                    about scale or concurrency you'd want to pin down first?") rather than
-                    volunteering the constraints outright.
-                    Advance to CLASS_MODEL once requirements are reasonably pinned down.
+                    a clarifying question, answer only that question directly, in a sentence or
+                    two, and stop there. Do not let them skip straight to classes without at
+                    least naming functional scope, expected scale/concurrency, and what's
+                    explicitly out of scope. If they ask nothing, prompt once ("Anything about
+                    scale or concurrency you'd want to pin down first?") rather than volunteering
+                    the constraints outright. Once they say requirements are clear (or equivalent),
+                    do not summarise entities or propose an approach yourself — hand it back with
+                    an open prompt ("Go ahead — what classes are you thinking of starting with?")
+                    and advance to CLASS_MODEL.
                     """;
             case CLASS_MODEL -> """
                     Have them write actual classes/interfaces in the editor, not just describe
-                    them verbally — a verbal-only design is a code_quality gap worth noting.
-                    Ask about responsibilities as they go: "what does this class own, and what
-                    does it deliberately not own?" Advance to DEEP_DIVE once a reasonable class
-                    model exists on the page, even if incomplete.
+                    them verbally — a verbal-only design is a code_quality gap worth noting. Do
+                    not propose classes, entities, or an approach yourself, even as a suggestion
+                    or a "here's one way to think about it" — if they're stuck, use
+                    set_hint_level rather than naming the classes for them. Ask about
+                    responsibilities as they go: "what does this class own, and what does it
+                    deliberately not own?" Advance to DEEP_DIVE once a reasonable class model
+                    exists on the page, even if incomplete.
                     """;
             case DEEP_DIVE -> """
                     Pick ONE specific mechanism from the interviewer-only notes above (usually
