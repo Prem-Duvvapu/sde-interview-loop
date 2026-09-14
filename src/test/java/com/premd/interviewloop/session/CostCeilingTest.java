@@ -9,6 +9,9 @@ import com.premd.interviewloop.domain.repository.LlmCallRepository;
 import com.premd.interviewloop.llm.AppSettingsStore;
 import com.premd.interviewloop.llm.LlmEvent;
 import com.premd.interviewloop.llm.ProviderKeyStore;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedLlmProvider;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedProviderFactory;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.TestProviderConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,12 +23,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_MODEL_ID;
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_PROVIDER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * D-7 (PROJECT_PLAN.md §5.3): a session that crosses the configured cost ceiling gets a
- * one-time warning, and is never blocked. Reuses the scripted provider harness from
- * {@link TurnOrchestratorIntegrationTest} rather than duplicating it.
+ * one-time warning, and is never blocked. Reuses the shared scripted provider harness
+ * ({@link com.premd.interviewloop.testsupport.ScriptedProviderSupport}) rather than
+ * duplicating it.
  *
  * <p>The scripted mock provider has no pricing entry in {@code config/providers.yaml}, so
  * calls it makes always cost $0 — real per-call cost is exercised elsewhere (T1). This test
@@ -33,12 +39,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * check on the *next* turn behaves correctly — crossed once, warned once, never repeated.
  */
 @SpringBootTest
-@Import(TurnOrchestratorIntegrationTest.TestProviderConfig.class)
+@Import(TestProviderConfig.class)
 @TestPropertySource(properties = "app.cost-ceiling-usd=0.01")
 class CostCeilingTest {
-
-    private static final String MOCK_PROVIDER_ID = "mock-test-provider";
-    private static final String MOCK_MODEL_ID = "mock-model-v1";
 
     @Autowired
     private TurnOrchestrator turnOrchestrator;
@@ -56,9 +59,9 @@ class CostCeilingTest {
     private AppSettingsStore settingsStore;
 
     @Autowired
-    private TurnOrchestratorIntegrationTest.ScriptedProviderFactory providerFactory;
+    private ScriptedProviderFactory providerFactory;
 
-    private TurnOrchestratorIntegrationTest.ScriptedLlmProvider mockProvider;
+    private ScriptedLlmProvider mockProvider;
 
     /** Captures every costWarning call; everything else is a no-op. */
     private static class RecordingSink implements TurnSink {

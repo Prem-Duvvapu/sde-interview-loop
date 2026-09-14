@@ -21,20 +21,20 @@ import com.premd.interviewloop.interviewer.InterviewerTools;
 import com.premd.interviewloop.interviewer.ModuleRegistry;
 import com.premd.interviewloop.interviewer.RoundContext;
 import com.premd.interviewloop.llm.*;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedLlmProvider;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedProviderFactory;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.TestProviderConfig;
 import com.premd.interviewloop.transcript.TranscriptService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import reactor.core.publisher.Flux;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_MODEL_ID;
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_PROVIDER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -51,90 +51,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * </ol>
  */
 @SpringBootTest
-@Import(TurnOrchestratorIntegrationTest.TestProviderConfig.class)
+@Import(TestProviderConfig.class)
 class TurnOrchestratorIntegrationTest {
-
-    private static final String MOCK_PROVIDER_ID = "mock-test-provider";
-    private static final String MOCK_MODEL_ID = "mock-model-v1";
-
-    @TestConfiguration
-    static class TestProviderConfig {
-        @Bean
-        public ScriptedProviderFactory scriptedProviderFactory() {
-            return new ScriptedProviderFactory();
-        }
-    }
-
-    static class ScriptedProviderFactory implements ProviderFactory {
-        private final ScriptedLlmProvider provider = new ScriptedLlmProvider();
-
-        @Override
-        public String id() {
-            return MOCK_PROVIDER_ID;
-        }
-
-        @Override
-        public LlmProvider create(String apiKey) {
-            return provider;
-        }
-
-        public ScriptedLlmProvider getProvider() {
-            return provider;
-        }
-    }
-
-    static class ScriptedLlmProvider implements LlmProvider {
-        private final Queue<List<LlmEvent>> responseQueue = new ConcurrentLinkedQueue<>();
-        private final List<LlmRequest> recordedRequests = Collections.synchronizedList(new ArrayList<>());
-        private final AtomicInteger callCount = new AtomicInteger(0);
-
-        public void enqueueResponse(List<LlmEvent> events) {
-            responseQueue.add(events);
-        }
-
-        public void reset() {
-            responseQueue.clear();
-            recordedRequests.clear();
-            callCount.set(0);
-        }
-
-        public int getCallCount() {
-            return callCount.get();
-        }
-
-        public List<LlmRequest> getRecordedRequests() {
-            return recordedRequests;
-        }
-
-        @Override
-        public String id() {
-            return MOCK_PROVIDER_ID;
-        }
-
-        @Override
-        public String displayName() {
-            return "Scripted Mock Provider";
-        }
-
-        @Override
-        public Capabilities capabilities() {
-            return new Capabilities(true, true, Capabilities.PromptCachingMode.NONE, false);
-        }
-
-        @Override
-        public Flux<LlmEvent> stream(LlmRequest request) {
-            callCount.incrementAndGet();
-            recordedRequests.add(request);
-            List<LlmEvent> events = responseQueue.poll();
-            if (events == null) {
-                events = List.of(
-                        LlmEvent.textDelta("Default mock response"),
-                        LlmEvent.usage(new LlmEvent.Usage(10, 10, 0, 0)),
-                        LlmEvent.done());
-            }
-            return Flux.fromIterable(events);
-        }
-    }
 
     @Autowired
     private TurnOrchestrator turnOrchestrator;

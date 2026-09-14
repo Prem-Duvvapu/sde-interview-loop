@@ -80,11 +80,18 @@ actual REST/WS/browser contracts.
   general-practice + full-loop, and `GET /api/sessions`/`GET /api/sessions/{id}` round-trips.
   No mock provider needed — session creation stores `providerId`/`modelId` as plain strings,
   resolved only when a round actually starts.
-- [ ] Add scripted-provider WebSocket coverage for `start_round`, candidate turns, streamed
-  deltas, `turn_complete`, silent-turn repair, and reconnect/restart behavior. **Still open** —
-  `TurnOrchestratorIntegrationTest` exercises the same logic at the `TurnOrchestrator`/`TurnSink`
-  level, not over an actual WebSocket connection with real frame JSON; `InterviewWebSocketHandler`
-  itself has no test coverage yet.
+- [x] Add scripted-provider WebSocket coverage for `start_round`, candidate turns, streamed
+  deltas, `turn_complete`, silent-turn repair, and reconnect/restart behavior. Done 2026-09-14:
+  `InterviewWebSocketHandlerTest` (`@SpringBootTest(webEnvironment = RANDOM_PORT)` + a real
+  `StandardWebSocketClient` against `/ws/interview`) — 6 tests covering the opening-brief
+  frame sequence, a full candidate turn's frame order (ack → deltas → tool_call →
+  phase_advanced → usage → turn_complete, the *actual* wire order, documented as such —
+  `round_started` arrives last, after `beginRound` completes, not first), the silent-turn
+  retry delivering real words over the socket, unknown-type and missing-roundId error frames,
+  and reconnect idempotency (a repeated `start_round` for an already-pinned round does not
+  re-send the opening brief). Extracted the scripted-provider harness from
+  `TurnOrchestratorIntegrationTest` into a shared, public `testsupport.ScriptedProviderSupport`
+  so this and future tests don't each duplicate a mock `LlmProvider`.
 - [ ] Add a small browser smoke suite (Playwright or an already-available equivalent; do not add a
   paid service) that starts the local app, creates a general mock, and confirms mobile controls.
   **Still open** — no frontend or browser-driven tests exist in this repo yet.
@@ -94,11 +101,13 @@ actual REST/WS/browser contracts.
 
 - [x] Tests prove JSON field names and status codes for `POST/GET /api/sessions*` actually
   consumed by React (`SessionControllerTest`).
-- [ ] WS frame ordering actually consumed by React — still open, see above.
+- [x] WS frame ordering actually consumed by React (`InterviewWebSocketHandlerTest`, see above).
 - [x] The test setup uses an isolated H2 database (existing `src/test/resources/application.yaml`
   in-memory config, unchanged).
-- [x] `./mvnw -o test` passes from a clean checkout (100 tests, 0 failures as of this update).
-  Frontend typecheck and a browser smoke test are still open.
+- [x] `./mvnw -o test` passes from a clean checkout (106 tests, 0 failures as of this update).
+  **Still open:** frontend typecheck as a CI/checklist step for this card specifically (it
+  already runs in `.github/workflows/ci.yml`, just not re-verified here) and a Playwright
+  browser smoke test — no frontend or browser-driven tests exist in this repo yet.
 
 ### C3 — Make full-loop and disconnect recovery explicit
 
