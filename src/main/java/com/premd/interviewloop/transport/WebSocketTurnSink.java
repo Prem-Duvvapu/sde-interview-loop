@@ -62,6 +62,11 @@ public class WebSocketTurnSink implements TurnSink {
     }
 
     @Override
+    public void costWarning(double sessionCostUsd, double ceilingUsd) {
+        send(codec.costWarning(sessionCostUsd, ceilingUsd));
+    }
+
+    @Override
     public void turnComplete(Long roundId) {
         send(codec.turnComplete(roundId));
     }

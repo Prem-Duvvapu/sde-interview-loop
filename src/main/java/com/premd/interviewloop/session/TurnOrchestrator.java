@@ -21,6 +21,7 @@ import com.premd.interviewloop.llm.ProviderRegistry;
 import com.premd.interviewloop.transcript.TranscriptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -77,6 +79,17 @@ public class TurnOrchestrator {
      */
     private final Map<Long, Integer> hintLevels = new ConcurrentHashMap<>();
     private final RoundEvaluator roundEvaluator;
+
+    /**
+     * Sessions already warned about crossing the cost ceiling (D-7). In-memory, same
+     * lifetime as {@link #hintLevels} — a restarted app re-warns once more on the next turn
+     * of a session that was already over, which is the safe direction to be wrong in for a
+     * warn-only signal.
+     */
+    private final Set<Long> costWarnedSessions = ConcurrentHashMap.newKeySet();
+
+    @Value("${app.cost-ceiling-usd:5.00}")
+    private double costCeilingUsd;
 
     public TurnOrchestrator(SessionRoundRepository roundRepo,
                             SignalRepository signalRepo,
@@ -268,12 +281,19 @@ public class TurnOrchestrator {
         // 5. Apply control calls — the backend decides, not the model.
         applyControlCalls(roundId, controlCalls, interviewerTurn, sink);
 
-        // 6. Record what the turn cost.
+        // 6. Record what the turn cost, and warn (never block) if the session just crossed
+        //    the configured ceiling (D-7).
         if (usage != null) {
             var call = costLedger.record(interviewer.provider().id(), interviewer.model(),
                     "interviewer", usage, latencyMs, round, interviewerTurn);
             sink.usage(usage.inputTokens(), usage.outputTokens(), usage.cacheReadTokens(),
                     call.getCostEstimateUsd() == null ? 0.0 : call.getCostEstimateUsd());
+
+            Long sessionId = round.getSession().getId();
+            double sessionCost = costLedger.sessionCostSoFar(sessionId);
+            if (sessionCost >= costCeilingUsd && costWarnedSessions.add(sessionId)) {
+                sink.costWarning(sessionCost, costCeilingUsd);
+            }
         }
 
         sink.turnComplete(roundId);

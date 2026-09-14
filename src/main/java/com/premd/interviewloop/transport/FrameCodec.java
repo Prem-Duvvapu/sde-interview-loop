@@ -74,6 +74,13 @@ public class FrameCodec {
         return encode("usage", data);
     }
 
+    public String costWarning(double sessionCostUsd, double ceilingUsd) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("sessionCostUsd", sessionCostUsd);
+        data.put("ceilingUsd", ceilingUsd);
+        return encode("cost_warning", data);
+    }
+
     private String encode(String type, Map<String, Object> data) {
         Map<String, Object> frame = new LinkedHashMap<>();
         frame.put("type", type);

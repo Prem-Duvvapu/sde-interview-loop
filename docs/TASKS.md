@@ -296,10 +296,17 @@ it belongs there or as a new small config).
    consistent pattern (see how `usage` frames already work in `FrameCodec`).
 3. Update `PROJECT_PLAN.md` §5.3 D-7 to record the resolution.
 
-**Acceptance criteria:**
-- [ ] A session that crosses the threshold visibly warns (verify with a low threshold set
-      deliberately low for the test, not by running up a real bill).
-- [ ] D-7 is marked resolved in `PROJECT_PLAN.md`, with the reasoning.
+**Acceptance criteria — done 2026-09-14:**
+- [x] A session that crosses the threshold visibly warns (verify with a low threshold set
+      deliberately low for the test, not by running up a real bill). Verified via
+      `CostCeilingTest` (`app.cost-ceiling-usd=0.01`): warns exactly once when crossed,
+      stays silent while under, never repeats on a later turn. **Not verified live in the
+      browser** — the frontend has no UI for the new `cost_warning` frame yet; it falls
+      through `frames.ts`'s existing graceful "unknown frame" path (a console warning + a
+      low-priority system message), confirmed by reading that code, not by opening a
+      browser. Adding real UI for it is a follow-up, not done here.
+- [x] D-7 is marked resolved in `PROJECT_PLAN.md`, with the reasoning: warn-only, no hard
+      stop, `app.cost-ceiling-usd` default $5.00, warns once per session.
 
 ### H4b — Disconnect recovery: resume shows the existing transcript
 

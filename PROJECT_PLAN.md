@@ -716,17 +716,24 @@ shapes differ" for how it's pinned by content hash so a mid-round re-upload can'
 what the round is scored against — and its "Never commit API keys" note, extended to
 resume content, since this is the most sensitive personal data this app now handles.
 
-### D-7 — Per-session cost ceiling *(Phase 9)*
-A full 4-hour loop is many hundreds of streamed turns. `llm_call` records per-call cost,
-so the data to decide this is being collected — but **no real $/round figure has been
-measured yet**, partly because `config/providers.yaml` still has `<set-me>` for Gemini
-pricing, so `cost_estimate_usd` currently computes as 0. Filling in real pricing is a
-prerequisite to deciding whether the app enforces a hard ceiling, warns, or just reports.
+### D-7 — Per-session cost ceiling. Resolved: warn-only, no hard stop.
+Real pricing landed in T1 (`config/providers.yaml`, Gemini included), so `cost_estimate_usd`
+is real rather than always 0. `TurnOrchestrator` now sums session cost
+(`CostLedger.sessionCostSoFar`, wrapping the `sumCostBySessionId` query that already
+existed) after every turn's cost is recorded, and sends a `cost_warning` WS frame
+(`FrameCodec`/`TurnSink`, same pattern as the existing `usage` frame) the first time a
+session crosses a configured ceiling — `app.cost-ceiling-usd` in `application.yaml`,
+default $5.00. Sent once per session (an in-memory set, same lifetime and reset-on-restart
+behaviour as the existing per-round hint-level tracking), never repeated on every
+subsequent turn, and **never blocks a turn** — a hard stop mid-interview is a worse
+experience than an unexpectedly large bill for a single-user local app, per this task's own
+original recommendation. The frontend has no UI for this frame yet; that's a follow-up, not
+part of this resolution.
 
-A related practical limit surfaced during development, worth knowing before designing this:
-the **Gemini free tier allows 20 requests/day per model**, which a couple of full rounds
-will exhaust. Quota is per-model, so switching to `gemini-3.6-flash` provides a separate
-bucket.
+A related practical limit surfaced during development, worth knowing before designing
+around cost further: the **Gemini free tier allows 20 requests/day per model**, which a
+couple of full rounds will exhaust. Quota is per-model, so switching to `gemini-3.6-flash`
+provides a separate bucket.
 
 ### D-9 — Persistence of UI-supplied API keys *(opened during Phase 1 rework)*
 `ProviderKeyStore` holds keys pasted through the settings UI **in memory only** — they are
