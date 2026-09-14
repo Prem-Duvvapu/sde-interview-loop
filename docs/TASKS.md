@@ -161,6 +161,67 @@ Related: the round-2-transition dead-air gap is a UX/observability issue, distin
 H4's disconnect-recovery gap (which is about the frontend recovering after losing the WS
 connection entirely, not about a slow-but-still-connected evaluator). Track separately.
 
+### Findings (2026-09-14) — general practice, voice controls, settings; still no key
+
+Verified with a real Chromium browser (Playwright, `chromium.launch` directly — `chromium-cli`
+is not available in this environment) against a locally-running backend + Vite dev server.
+**No LLM API key was available in this environment at all** (checked `GEMINI_API_KEY`,
+`GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` — all unset), so this pass covers
+what's reachable without one: Setup, general practice (shipped since the last walkthrough,
+never browser-verified before this), Settings, and voice controls. A full round, phase
+transitions, Replay, and the full-loop transition all still need a real key and remain
+exactly as open as the 2026-09-05 findings above.
+
+- **Found and fixed a real bug:** no favicon was ever declared (`web/index.html` had no
+  `<link rel="icon">`, and no `web/public/` directory existed at all), so the browser's
+  automatic `/favicon.ico` request 404'd on **every single page load**, every time,
+  deterministically. Confirmed via `curl -o /dev/null -w '%{http_code}' /favicon.ico` → 404,
+  and via a clean console-error capture before/after. Fixed with
+  `<link rel="icon" href="data:," />` — an explicit empty icon that stops the browser
+  requesting one at all, rather than picking a design on the app's behalf. Verified the
+  404 and its console error are both gone after the fix.
+  **This is probably not the same bug as the "Maximum update depth exceeded" + burst-of-9×-404s
+  finding above** — that one was intermittent (2/7 attempts) and specifically tied to
+  entering the interview view for a full-loop round, whereas the favicon 404 is
+  deterministic and present on every load regardless of flow. Both are 404s, but likely
+  unrelated; that mystery is still open and still needs its own repro.
+- **General practice (Setup panel) — clean, no console errors,** at 1440px, 1080px, and
+  375px. Renders its own copy ("Choose one module and difficulty without company-specific
+  quirks..."), a single-module-only control set (no full-loop toggle, matching the backend's
+  400 on that combination — see `SessionControllerTest`), and a distinct "Start mock" button
+  label instead of "Start round." Never browser-verified before this pass.
+- **Starting a general-practice round — reaches the real interview view cleanly**, no
+  console errors, no crash. Phase strip, transcript pane, Monaco code editor with its
+  placeholder comment, and the composer all render correctly. Confirms live, for the first
+  time, exactly what happens with no provider key configured: `beginRound` resolves a
+  provider *before* rendering the opening brief (even though the brief itself is a local
+  template, not an LLM call) and fails fast with a clean, non-crashing transcript error —
+  `"The configured interviewer provider 'google' is not available. Configured providers: [].
+  Check that its API key is set."` No white screen, no unhandled exception. This is the
+  answer to "what does a first-run user with no key yet actually see," confirmed rather
+  than assumed.
+- **Voice controls — both pieces work with no console errors.** The mic ("Use mic") button
+  is enabled in headless Chromium with title "Dictate your answer" — `SpeechRecognition`'s
+  JS API surface exists in Chromium/Chrome even headless (actual recognition would still
+  need a real mic and user permission in a non-headless context; this only confirms
+  `supportsRecognition()` correctly detects the API and doesn't crash). The "Voice off" /
+  "Voice on" TTS toggle in the interview header toggles cleanly with no errors. Genuinely
+  unsupported-browser behavior (Safari/Firefox, where the mic button should show
+  `disabled` with the "not supported" title) is **still unverified** — this environment
+  only has Chromium.
+- **Settings overlay — clean, no unexpected console errors.** Shows "Gemini — no key"
+  correctly for the interviewer/evaluator role bindings, the resume upload section
+  ("No resume on file yet."), and provider capability cards (Claude, OpenAI, Gemini,
+  DeepSeek) with their badges. One 404 fires when the overlay opens
+  (`GET /api/resume` → 404) — **confirmed intentional**, not a bug: `ResumeController`
+  deliberately returns 404 to mean "no resume yet" (its own `ResponseEntity.status(NOT_FOUND)`
+  branch), and the frontend already renders "No resume on file yet." from it without
+  incident. Distinct from the favicon 404: that one had no purpose, this one is the API's
+  actual absence signal.
+
+Not reached, same as before: Replay, disconnect/reconnect, a full-loop transition, and the
+round-2 dead-air state — all still need a live LLM call this environment cannot make.
+
 ---
 
 ## H2 — Measure and document Gemini prompt-cache behaviour

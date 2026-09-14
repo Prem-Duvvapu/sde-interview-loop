@@ -49,22 +49,40 @@ not prove responsive UI, socket behavior, or transition feedback.
 
 **Scope**
 
-- Exercise Setup, general practice, company single-module, and company full-loop at desktop
-  (1440px), laptop (1080px), and phone (375px) widths.
-- Exercise first interviewer response, code/scratch/diagram surfaces, voice toggle, unsupported
-  microphone state, completion, dashboard, replay, and reconnect affordance.
-- Fix the known full-loop dead-air state: evaluation can take roughly a minute and the UI currently
-  needs an explicit in-progress/next-round status while waiting.
-- Reproduce and isolate the intermittent React “Maximum update depth exceeded” warning and burst
-  of 404s noted in `docs/TASKS.md` H1. Do not suppress them without a cause.
+- [x] Exercise Setup and general practice at desktop (1440px), laptop (1080px), and phone
+  (375px) widths. Done 2026-09-14 (docs/TASKS.md H1 findings) — clean at all three, no
+  console errors. **Still open:** company single-module and company full-loop at these
+  widths (reachable without a key; not yet repeated since the profile/loop UI last changed).
+- [ ] Exercise first interviewer response, code/scratch/diagram surfaces, completion, dashboard,
+  replay, and reconnect affordance. **Still open** — all need a real LLM call to progress past
+  the opening screen (session creation and the opening brief template render with no key, per
+  the 2026-09-14 findings, but `beginRound` itself resolves a provider and fails fast without
+  one — see docs/TASKS.md H1).
+- [x] Voice toggle and microphone state. Done 2026-09-14: both the TTS toggle and the mic
+  button work with no console errors in Chromium. **Partially open:** genuinely
+  unsupported-browser behavior (Safari/Firefox showing the mic button disabled) is
+  unverified — no such browser is available in this environment.
+- [ ] Fix the known full-loop dead-air state: evaluation can take roughly a minute and the UI
+  currently needs an explicit in-progress/next-round status while waiting. **Still open** —
+  needs a live full-loop round to confirm any fix against the real timing.
+- [x] Reproduce and isolate the intermittent React "Maximum update depth exceeded" warning and
+  burst of 404s noted in `docs/TASKS.md` H1. **Partially resolved:** found and fixed an
+  unrelated, always-reproducible favicon 404 (no favicon was ever declared) — real, but
+  deterministic and present on every load, so almost certainly not the same bug as the
+  intermittent one tied to full-loop interview-view entry. That original mystery is still
+  open and still needs a live full-loop repro; see docs/TASKS.md H1 for why they're
+  believed distinct.
 
 **Acceptance criteria**
 
 - One recorded/manual browser walkthrough covers the flows above without clipped controls,
-  unreadable contrast, horizontal overflow, or unexplained console errors.
+  unreadable contrast, horizontal overflow, or unexplained console errors. Partial — see
+  scope checklist above; the reachable-without-a-key half is done, the rest needs a key.
 - Full-loop completion shows a clear waiting state until `next_round_ready`, an evaluation warning,
-  or an actionable retry/return path.
-- Findings are documented in `docs/TASKS.md`; a real defect adds an `RCA.md` entry.
+  or an actionable retry/return path. Still open.
+- Findings are documented in `docs/TASKS.md`; a real defect adds an `RCA.md` entry. Done —
+  the favicon fix is routine enough not to need its own RCA entry per RCA.md's own bar
+  ("not every bug fix needs an entry — routine fixes with an obvious cause don't").
 
 ### C2 — Add endpoint, WebSocket, and browser integration coverage
 
@@ -184,19 +202,39 @@ actual REST/WS/browser contracts.
 
 **Scope**
 
-- Browser-test the existing Web Speech controls on Chrome/Edge and document Safari/Firefox
-  behavior. Recognition may be unavailable; typed fallback must remain excellent.
-- Add a compact settings explanation that browser speech recognition can be cloud-backed (notably
-  Chrome) and does not send audio through this application backend.
-- Verify speech cancellation on exit, next-round transitions, and text streaming boundaries.
+- [x] Browser-test the existing Web Speech controls on Chrome/Edge. Done 2026-09-14 for
+  Chrome-family (Chromium, headless — no Edge available in this environment): mic toggle
+  and TTS toggle both work with no console errors; see docs/TASKS.md H1 findings. **Still
+  open:** document Safari/Firefox behavior — neither is installed in this environment.
+  Recognition may be unavailable there; typed fallback must remain excellent (unchanged,
+  not touched).
+- [ ] Add a compact settings explanation that browser speech recognition can be cloud-backed
+  (notably Chrome) and does not send audio through this application backend. **Still open** —
+  no such explanation exists in the Settings overlay yet (confirmed by the 2026-09-14
+  screenshot — Settings has Roles/Resume/Providers sections, nothing about voice).
+- [x] Verify speech cancellation on exit and next-round transitions. Verified **by reading
+  the code**, not a live call (no completed interviewer turn was reachable without an LLM
+  key): `App.tsx` calls `voice.cancelSpeech()` on session exit and on the next-round
+  transition/voice-toggle-off paths; `VoiceProvider.cancelSpeech()` calls
+  `speechSynthesis.cancel()`. **Text streaming boundaries — confirmed by reading, not a
+  live call:** `App.tsx`'s `turn_complete` handler is the only call site for `voice.speak(...)`,
+  gated on `ttsEnabled`; no `text_delta` handler calls `speak`, so TTS cannot fire on a
+  partial in-progress turn by construction. A live confirmation (hearing it actually happen
+  against a real streamed turn) is still open.
 - Only design a key-based `VoiceProvider` upgrade after the owner chooses an already-owned key;
-  no new vendor/subscription or local speech stack.
+  no new vendor/subscription or local speech stack. Untouched — no owner decision yet.
 
 **Acceptance criteria**
 
-- TTS only reads completed interviewer turns, never partial deltas or candidate text.
-- Dictation always remains editable and is never auto-submitted.
-- Unsupported browsers have a clear, non-blocking disabled state.
+- TTS only reads completed interviewer turns, never partial deltas or candidate text. Confirmed
+  by code reading (see above); not yet confirmed by ear against a live round.
+- Dictation always remains editable and is never auto-submitted. Confirmed by code reading:
+  `Composer.tsx`'s dictation `onUpdate` callback only calls `setText(...)`; no code path from
+  dictation reaches `submit()`.
+- Unsupported browsers have a clear, non-blocking disabled state. Confirmed in code
+  (`Composer.tsx`: `disabled={disabled || !voice.supportsRecognition()}`, with a title
+  explaining why) and confirmed the *supported* path works live in Chromium. The actual
+  *unsupported* rendering (Safari/Firefox) remains unverified live — no such browser here.
 
 ### C8 — Package and release the local product
 
