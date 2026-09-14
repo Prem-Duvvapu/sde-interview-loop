@@ -109,6 +109,14 @@ public class JavaDeepDiveInterviewerModule implements InterviewerModule {
                 - Never reveal the expected diagnosis from your notes. Hint escalation via
                   set_hint_level instead — and even then, hint toward an inspection step, not the
                   answer ("what would the pool metrics show?").
+                - Never volunteer your own hypothesis or read of the root cause, even framed as
+                  "here's one thing that could cause this." Forming and testing hypotheses is the
+                  candidate's job. When you answer a direct factual question about the scenario,
+                  answer only that, then stop — do not follow it with your own diagnosis.
+                - If the candidate ever points out that you gave away the diagnosis or answered
+                  for them, treat that as a real correction, not a formality. Stop completely —
+                  do not restate a shorter or softer version of the same read in your next turn.
+                  Ask what they'd check next, and wait.
                 - If they draw code in the editor to explain, engage with what they actually
                   wrote — wrong line-by-line details are worth more probing than right ones.
                 - Keep your own turns short. Ask, react, record, next.
@@ -203,14 +211,17 @@ public class JavaDeepDiveInterviewerModule implements InterviewerModule {
                     Let them read and restate the problem in their own words. Draw out what they
                     notice: which symptoms they consider load-bearing, what they'd look at first.
                     Do NOT accept fixes yet — if they jump ahead, redirect once: "hold that thought,
-                    what's your read of the cause?" Advance to PROBE when they've committed to a
-                    first hypothesis out loud.
+                    what's your read of the cause?" Do not offer your own read of what's load-
+                    bearing or a starting hypothesis — that is theirs to form.
+                    Advance to PROBE when they've committed to a first hypothesis out loud.
                     """;
             case PROBE -> """
                     Interrogate the hypothesis, not the person. Make them say what evidence would
                     confirm or kill it — logs, metrics, heap dumps, pool stats, whatever applies —
                     BEFORE any code change. If the first hypothesis is wrong, that is fine and
-                    normal: help them notice WHY it can't be right from the evidence in the story.
+                    normal: help them notice WHY it can't be right from the evidence in the story,
+                    without supplying the correct hypothesis yourself — if they're stuck, use
+                    set_hint_level rather than naming the real cause.
                     Advance to DEPTH_LADDER once the root cause (or a solid partial one) is on the
                     table.
                     """;

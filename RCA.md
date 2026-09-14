@@ -33,7 +33,7 @@ a lesson in them.
 | 11 | 2026-08-22 → 2026-08-29 | Plan specified Zustand + TanStack Query; frontend used neither, plan not corrected | Fixed (docs) | `fba203c` |
 | 12 | 2026-08-23 | Live-testing exhausted the owner's Gemini free-tier quota mid-session | Understood, not "fixable" | documented in `AGENTS.md` |
 | 13 | 2026-09-05 | `start.sh` killed a backend that had actually started, on a false readiness timeout | Fixed | `start.sh` |
-| 14 | 2026-09-08 | LLD interviewer repeatedly volunteered the class design/code unprompted, even after the candidate flagged it twice | Fixed (prompt only, **not verified live**) | `LldInterviewerModule.java` |
+| 14 | 2026-09-08 → 2026-09-14 | LLD interviewer repeatedly volunteered the class design/code unprompted, even after the candidate flagged it twice; same weakness then found and fixed in the other 6 modules | Fixed in all 7 modules (prompt only, **not verified live**) | `LldInterviewerModule.java` + 6 others |
 
 ---
 
@@ -459,13 +459,38 @@ prompt is the only lever available here. **Re-run this exact LLD scenario live o
 allows, and watch specifically for the "answer, then keep talking" and
 "corrected-then-recurs-softened" patterns** before treating this as closed.
 
-**Open question, not yet acted on.** `DsaInterviewerModule`, `HldInterviewerModule`,
-`CsfInterviewerModule`, `JavaDeepDiveInterviewerModule`, `BehavioralInterviewerModule`, and
-`ResumeInterviewerModule` all carry the identical "Ask, don't tell... Never hand them X
-unprompted" boilerplate that failed here, and none of them have this incident's specific
-strengthening yet. This transcript is evidence for LLD only — flagging the other six as
-sharing the same wording and plausibly the same weakness, not claiming they've been
-observed to fail the same way.
+**Update, 2026-09-14 — extended to the other six modules.** `DsaInterviewerModule`,
+`HldInterviewerModule`, `CsfInterviewerModule`, `JavaDeepDiveInterviewerModule`,
+`BehavioralInterviewerModule`, and `ResumeInterviewerModule` all carried the identical
+"Ask, don't tell... Never hand them X unprompted" boilerplate that failed here, with no
+strengthening. Applied the same shape of fix to each, adapted to what "giving away the
+answer" actually means for that round's format rather than copied verbatim:
+
+- **DSA** (design/solve round, closest analog to LLD): never volunteer the approach or
+  edge-case read; answer a clarifying question and stop; hand "ready to talk approach" back
+  with an open prompt; treat a candidate's correction as a hard stop. Added to `persona()`
+  and the `CLARIFYING`/`APPROACH` phase directives.
+- **HLD** (design/solve round): same shape, applied to requirements/scope and component
+  choices instead of class design. Added to `persona()` and the `REQUIREMENTS`/`HIGH_LEVEL`
+  phase directives.
+- **CSF** (rapid-fire Q&A, different shape — the risk is answering its own question rather
+  than pre-empting a design): strengthened "never teach the answer" to explicitly cover
+  softening into an explanation once the candidate gives up, plus the same
+  correction-is-a-hard-stop rule.
+- **Java deep-dive** (diagnosis round): never volunteer a hypothesis or root-cause read;
+  answer a factual question and stop; same correction rule. Added to `persona()` and the
+  `SCENARIO`/`PROBE` phase directives.
+- **Behavioral** (STAR round): never suggest what the candidate's contribution, result, or
+  lesson learned "probably" was; same correction rule.
+- **Resume** (deep-dive round): never suggest what a technical decision or impact "probably"
+  was; same correction rule. Added to `persona()` and the `TECHNICAL_DEEP_DIVE` phase
+  directive.
+
+Same caveat as the original fix: **prompt-only, not verified against a live model** for any
+of the six. `./mvnw test` (91 tests) still passes after the change. This closes the "flagged
+but not fixed" state for all seven modules, but does not close the live-verification gap —
+that still needs a real round per module once quota allows, watching specifically for the
+same "answer, then keep talking" and "corrected-then-recurs-softened" patterns.
 
 ---
 

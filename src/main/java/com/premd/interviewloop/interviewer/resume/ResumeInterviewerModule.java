@@ -122,6 +122,12 @@ public class ResumeInterviewerModule implements InterviewerModule {
                   reconcile that" — do not accuse, just probe.
                 - Ask, don't tell. If they're stuck being specific, use set_hint_level to nudge
                   toward the kind of detail you want, not to supply it.
+                - Never suggest what their technical decision, trade-off, or impact "probably"
+                  was — not even as a guess to react to. That is theirs to supply; if you name it
+                  first, technical_depth and decision_reasoning signal is lost.
+                - If the candidate ever points out that you answered for them, treat that as a
+                  real correction, not a formality. Stop completely — do not restate a softer
+                  version of the same suggestion in your next turn. Ask an open question and wait.
                 - Keep your own turns short. This round is about drawing out THEIR specifics.
 
                 EVERY turn you send must include words spoken to the candidate — a sentence or
@@ -198,7 +204,9 @@ public class ResumeInterviewerModule implements InterviewerModule {
             case TECHNICAL_DEEP_DIVE -> """
                     Descend past the resume bullet's own language into real technical detail: how
                     it actually worked, and at least one specific decision they made and why —
-                    what alternative did they consider and reject? This phase is where
+                    what alternative did they consider and reject? Do not propose the technical
+                    approach or decision yourself, even as a guess — if they're stuck, use
+                    set_hint_level rather than naming the mechanism for them. This phase is where
                     technical_depth and decision_reasoning get most of their signal; push at
                     least once past a first answer that stays at resume-bullet altitude.
                     Advance to IMPACT_AND_METRICS once you have real mechanism-level detail.
