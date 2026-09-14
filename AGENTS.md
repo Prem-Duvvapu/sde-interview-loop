@@ -333,7 +333,7 @@ editing:
 Note the frontend picks its pane from `moduleType` (`InterviewView.tsx`, `phases.ts`), not
 from `artifactKind()` — so a new module needs both sides updated.
 
-Bank sizes today: DSA 11, LLD 5, HLD 4, Java deep-dive 6 scenarios, CSF 2 topic packs.
+Bank sizes today: DSA 11, LLD 7, HLD 6, Java deep-dive 6 scenarios, CSF 2 topic packs.
 
 ---
 

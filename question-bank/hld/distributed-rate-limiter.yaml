@@ -1,0 +1,83 @@
+# Original prompt, written for this project. "Design a rate limiting service" is a
+# generic, widely used system-design exercise pattern, not proprietary text — but the
+# numbers, requirements, constraints and interviewer notes below are original to this
+# project (see D-5 in PROJECT_PLAN.md).
+slug: distributed-rate-limiter
+title: Rate Limiting Service
+difficulty: medium-hard
+tags:
+  - low-latency
+  - consistency-tradeoffs
+  - capacity-estimation
+
+statement: >
+  Design a shared rate-limiting service that multiple API gateway instances call before
+  forwarding a request, to enforce a per-API-key limit (e.g. 1000 requests/minute per key)
+  consistently ACROSS all gateway instances — not just per-instance.
+
+  Functional requirements:
+  - `allow(apiKey)` — callable by any of many gateway instances; must reflect the global
+    count across all instances, not just the calling instance's own traffic.
+  - Limits are configurable per API key (different customers, different tiers).
+  - The service sits on the hot path of every request — it must not become the thing that
+    slows every downstream API call down.
+
+  Scale to design for:
+  - 500,000 API keys.
+  - 2 million requests/second in aggregate across all gateway instances, each needing an
+    allow() check.
+  - The rate-limit check must add no more than roughly 2ms at p99 to the request path.
+
+constraints:
+  - You may assume a managed in-memory store (Redis-like) and a managed database are
+    available; the interesting decisions are how you use them, not vendor choice.
+  - Perfect global accuracy at this request rate has a real cost — discuss the trade-off
+    rather than assuming it away.
+
+example: >
+  Gateway instance A and gateway instance B both serve traffic for api-key-123, whose
+  limit is 1000/min. If A alone has already let through 1000 requests this minute, a call
+  to allow("api-key-123") from B must also return false for the rest of that minute — the
+  limit is shared, not per-instance.
+
+interviewer_notes: >
+  Estimation anchors: 2M req/sec each needing a check against a shared store is the
+  central numbers-first tension of this problem. A naive "every allow() call does a
+  synchronous round-trip to a central in-memory store" is roughly plausible in raw
+  throughput terms (a well-provisioned in-memory store handles very high ops/sec), but
+  adds real network latency — often eating into or exceeding the stated ~2ms budget once
+  fan-out and tail latency are counted — and makes that store a single point of
+  contention across 500K keys. Expect the candidate to at least name the latency
+  constraint as a real design pressure, not assume synchronous central checking is free.
+
+  Expected shape: the strongest answers land on one of two approaches and can articulate
+  the trade-off between them — (1) a synchronous central store (an atomic increment-with-
+  TTL, or a small atomic script for correctness) accepting the network hop but keeping
+  counts exact; or (2) local per-instance counting with periodic async sync to a central
+  store, trading strict global accuracy for latency (each instance allows up to its local
+  share of the limit, reconciling on a cadence). This is the trade_off_reasoning probe —
+  push directly: "what's the actual cost of being wrong here — does allowing a few extra
+  requests over the limit matter for this system?" A candidate who picks (2) without being
+  able to bound how much overshoot is possible, or picks (1) without acknowledging the
+  added latency/contention, has only half an answer.
+
+  Component design: the allow() hot path should NOT touch a durable relational database
+  per call — a database, if used at all, holds per-key limit CONFIGURATION refreshed on a
+  slow cadence, while the hot path talks only to the in-memory store. A design that checks
+  a relational database on every request is a real bottleneck_identification gap — push
+  on it: "two million times a second, to a database?"
+
+  Bottleneck to surface: once centralized, the in-memory store itself becomes the single
+  dependency every request now passes through. Ask what happens to gateway traffic if that
+  store has a bad second — does the system fail closed (reject everything) or fail open
+  (let everything through), and which is worse for THIS system? There's no universally
+  correct answer; a candidate who hasn't considered the question at all is the gap, not
+  whichever answer they land on.
+
+  Common SDE-2 failure modes: designing purely per-gateway-instance rate limiting and
+  declaring the problem solved — this misses the explicit "global" requirement entirely;
+  reaching for a distributed consensus protocol (Raft/Paxos) where a single fast atomic
+  counter store solves the problem more simply; not noticing that "1000/minute" forces a
+  choice between a fixed window (simple, has a boundary-burst problem) and a sliding
+  window (smoother, costs more per check) — either is acceptable if named; silence about
+  the choice is the gap.

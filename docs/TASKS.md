@@ -438,11 +438,16 @@ starting.
 
 ### H6a — Grow the remaining question banks (agent-doable)
 
-DSA grew from 5 to 11 (PR #1); **LLD (5), HLD (4), Java deep-dive (6), and CS fundamentals
-(2 packs) have not grown.** Follow the exact process in the original T8 card below
-(original prose only, filename stem = slug, `interviewer_notes` required, hand-verify every
-worked example, restart to validate at boot). Prioritise LLD and HLD — smaller banks, and
-the ones most likely to repeat for the owner soonest.
+DSA grew from 5 to 11 (PR #1); LLD grew from 5 to 7 (added `elevator-system` — concurrency
++ dispatch strategy pattern + direction-aware state machine — and `movie-ticket-booking` —
+atomic multi-seat holds + automatic expiry + pricing decorator); HLD grew from 4 to 6
+(added `distributed-rate-limiter` — global-vs-local accuracy trade-off under a hot-path
+latency budget — and `cloud-file-storage`, capped at `medium-hard` per the pinned
+`HldQuestionBankTest` bar, not `hard` — content-addressed chunking/dedup + sync versioning
++ offline-conflict handling). **Java deep-dive (6) and CS fundamentals (2 packs) have not
+grown.** Follow the exact process in the original T8 card below (original prose only,
+filename stem = slug, `interviewer_notes` required, hand-verify every worked example,
+restart to validate at boot). Java deep-dive and CS fundamentals are what's left.
 
 ### H6b — Validate profiles from first-hand data (owner-only — do not attempt this half)
 

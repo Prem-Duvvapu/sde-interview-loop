@@ -1,0 +1,73 @@
+# Original prompt, written for this project. "Design an elevator system" is a generic,
+# widely used LLD exercise pattern, not proprietary text — but the requirements, constraints
+# and interviewer notes below are original to this project (see D-5 in PROJECT_PLAN.md).
+slug: elevator-system
+title: Multi-Elevator Dispatch System
+difficulty: medium-hard
+tags:
+  - concurrency
+  - state-machine
+  - strategy-pattern
+
+statement: >
+  Design the core classes for a multi-elevator control system in a single building.
+
+  - An elevator has a current floor, a direction, and a set of floors it still needs to
+    stop at.
+  - `requestElevator(int floor, Direction direction)` — a hall call: someone standing on a
+    floor presses "up" or "down". The system must decide which elevator will service it.
+  - `selectFloor(int elevatorId, int floor)` — a car call: someone already inside a
+    specific elevator presses a floor button.
+  - The dispatch algorithm that decides which elevator answers a hall call should be
+    swappable (nearest-car today, a zone-based algorithm later) without changing the
+    call-handling code.
+  - `advance()` — a single time-step tick that moves every elevator one floor (or
+    progresses door state) and represents the passage of time in the system.
+
+  Multiple elevators move concurrently and hall/car calls can arrive from many threads at
+  once, including while `advance()` is mid-tick.
+
+constraints:
+  - Single building, single process — no cross-building or distributed concerns.
+  - Assume a fixed floor range and a fixed number of elevators known at startup.
+  - A tick-based movement model (advance() moves one floor or progresses doors) is
+    sufficient — you do not need to simulate precise physical timing.
+
+example: >
+  requestElevator(5, UP) with elevator 1 idle at floor 1 and elevator 2 idle at floor 8
+  should dispatch elevator 2 (closer, and positioned to serve an upward request from floor
+  5 without first having to pass it). Repeated calls to advance() move elevator 2 toward
+  floor 5, then open its doors on arrival.
+
+interviewer_notes: >
+  Expected shape: an Elevator class holding id/currentFloor/direction/state (e.g. IDLE,
+  MOVING_UP, MOVING_DOWN, DOORS_OPEN) plus a per-elevator collection of target floors, and
+  a DispatchStrategy interface (a nearest-car implementation as the default) that the
+  controller calls to pick an elevator for a hall call — this is the SOLID/extensibility
+  probe, structurally similar to the rate-limiter's strategy requirement but for a
+  different reason: real elevator systems do swap dispatch algorithms for load-balancing.
+  A controller with the elevator-picking logic inline in a big if/else, with no seam for a
+  second algorithm, is a real gap — call it out directly in DEEP_DIVE.
+
+  State machine: the single best probe for whether direction-aware stop ordering has
+  actually been modeled, not just a plain FIFO queue, is what happens when a car call
+  arrives for a floor the elevator has already passed in its current direction (elevator
+  moving up passes floor 5, then someone AT floor 5 requests up). A plain queue processed
+  in arrival order produces visibly wrong behavior here — bouncing back past floors it was
+  already headed toward — worth naming directly if that's what the design does.
+
+  Concurrency: hall/car calls can arrive on any thread while advance() ticks state forward,
+  possibly from a separate scheduler thread. Two failure modes worth probing directly:
+  (1) a hall call being dispatched based on a per-elevator queue that advance() is
+  concurrently mutating — needs synchronization scoped PER elevator, not one global lock
+  across every elevator (the same scalability trap as the rate-limiter's per-client
+  locking: "what happens to elevator 4 while elevator 1's queue is locked?"); (2) two hall
+  calls for the same floor/direction both being independently dispatched to two different
+  elevators because each dispatch decision read stale state — ask "what stops two
+  elevators being sent to serve the same call?"
+
+  Common SDE-2 gaps: modeling an elevator's position as a bare floor number with no
+  direction, which makes correct stop-ordering impossible to express at all; putting the
+  dispatch decision INSIDE the Elevator class itself rather than a separate strategy the
+  controller consults — an elevator should know where it's going, not how it was chosen to
+  go there, and that coupling is worth naming if you see it.
