@@ -348,6 +348,61 @@ class TurnOrchestratorIntegrationTest {
         assertThat(snapshots.get(0).getComparabilityEpoch()).isEqualTo(evaluatorEpoch);
     }
 
+    /**
+     * H5 (docs/TASKS.md, PROJECT_PLAN.md §3): the evaluator's system prompt must carry the
+     * calibration anchors, clearly separated from the module's own rubric text so the model
+     * cannot confuse the illustrative examples with this round's real dimensions or evidence.
+     */
+    @Test
+    void evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric() {
+        // Deliberately not "google" — finalEvaluation_createsSessionReportAndEpochTaggedSnapshot
+        // asserts exactly one readiness snapshot for google/dsa, and this class doesn't roll
+        // back between tests, so reusing that company+module pair here would break its count.
+        InterviewSession session = sessionManager.createSingleModuleSession(
+                "microsoft", ModuleType.DSA, "medium", MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        Long roundId = session.getRounds().get(0).getId();
+
+        turnOrchestrator.beginRound(roundId, TurnSink.noop());
+        sessionManager.completeRound(roundId);
+
+        settingsStore.setEvaluator(MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        mockProvider.enqueueResponse(List.of(
+                LlmEvent.toolCall(EvaluationTools.SUBMIT_EVALUATION, "call_eval_2", Map.of(
+                        "scores", Map.of("clarification", 3),
+                        "strengths", List.of("Engaged with the problem."),
+                        "gaps", List.of("Limited depth."),
+                        "narrative_md", "Adequate.")),
+                LlmEvent.usage(new LlmEvent.Usage(90, 30, 0, 0)),
+                LlmEvent.done()
+        ));
+
+        roundEvaluator.evaluate(roundId);
+
+        LlmRequest lastRequest = mockProvider.getRecordedRequests()
+                .get(mockProvider.getRecordedRequests().size() - 1);
+        String system = lastRequest.getSystemMessages().get(0).getContent();
+
+        // The anchor block is present, clearly labelled, and explicitly disclaims being this
+        // round's real candidate — not just present, but present as its own labelled section.
+        assertThat(system)
+                .contains("CALIBRATION EXAMPLES")
+                .contains("not this round's candidate")
+                .contains("BELOW THE BAR")
+                .contains("ABOVE THE BAR");
+
+        // Structural separation: the module's rubric (a real dimension string) comes first,
+        // the calibration block after it — never interleaved with or ahead of the rubric.
+        int rubricIndex = system.indexOf("clarification");
+        int anchorIndex = system.indexOf("CALIBRATION EXAMPLES");
+        assertThat(rubricIndex).isGreaterThanOrEqualTo(0);
+        assertThat(anchorIndex).isGreaterThan(rubricIndex);
+
+        // The anchors live in the system message only — never inside the evidence/conversation
+        // message that carries this round's actual signals and transcript.
+        String evidenceMessage = lastRequest.getConversationMessages().get(0).getContent();
+        assertThat(evidenceMessage).doesNotContain("CALIBRATION EXAMPLES");
+    }
+
     @Test
     void fullLoop_preparesOnlyTheNextRoundWithPrivateStableHandoff() {
         InterviewSession session = sessionManager.createSession(

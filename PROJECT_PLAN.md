@@ -530,9 +530,21 @@ driven by `min_sessions_for_confidence`.
 
 **The honest limitation:** this measures you against a *model's* idea of each company's
 bar, seeded by profiles I generated. It is a rehearsal instrument and a drift detector,
-not a calibrated predictor. Phase 7 includes anti-inflation measures (fixed rubric text,
-anchored few-shot examples at each band, evaluator separated from interviewer). None of
-that makes the absolute numbers trustworthy — the *trend* is the trustworthy part.
+not a calibrated predictor. Phase 7's anti-inflation measures are fixed rubric text,
+anchored few-shot examples at each band (H5, `RoundEvaluator.CALIBRATION_ANCHORS` —
+module-agnostic per-band examples of evidence quality and response-to-pushback, inserted
+after `module.rubric()` in the evaluator's system prompt, clearly labelled so they cannot
+be mistaken for the real round's evidence), and evaluator separated from interviewer. None
+of that makes the absolute numbers trustworthy — the *trend* is the trustworthy part.
+
+**H5 verification note:** the anchors' presence and structural separation from the real
+round's evidence is covered by
+`TurnOrchestratorIntegrationTest.evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric`.
+**Not done:** an actual before/after score comparison against a live model — this
+environment had no LLM API key/quota available to run one. That measurement (H5 step 4:
+replay a real round's already-recorded signals and transcript through the evaluator with
+and without the anchor block, compare the scores) is still open and needs the owner's
+quota to close honestly rather than being asserted without evidence.
 
 ---
 
@@ -583,8 +595,10 @@ multi-round loop without burning excessive quota.
 **Phase 7 — Evaluation, reports, dashboard, replay.** *Core flow implemented.* Per-round
 evaluation writes session reports once the final evaluation exists; readiness snapshots and
 trend points retain their comparability epoch; the dashboard presents report, history,
-module scores and trends, and links into replay. Remaining hardening: anchored examples to
-reduce evaluator inflation and a browser-based replay/dashboard walkthrough.
+module scores and trends, and links into replay. Anchored calibration examples landed (H5,
+see §3) — structurally verified, but the live before/after inflation measurement H5 called
+for is still open, blocked on LLM quota. Remaining hardening: that measurement, and a
+browser-based replay/dashboard walkthrough.
 
 **Phase 8 — Voice mode.** *Browser-native foundation implemented.* A small frontend
 `VoiceProvider` boundary now supplies opt-in text-to-speech for completed interviewer replies

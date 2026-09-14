@@ -421,12 +421,24 @@ measurement showing whether that is happening here.
    have one, to avoid a fresh live call) and run it through the evaluator with and without
    the anchors. Compare the scores. Write down what changed.
 
-### Acceptance criteria
-- [ ] Anchors are in the evaluator's system prompt, clearly separated from the real
-      round's evidence so they cannot be confused with it.
-- [ ] A before/after comparison exists and is written down — even a null result ("no
-      visible change on this example") is useful information, record it either way.
-- [ ] `PROJECT_PLAN.md` §3 updated to reflect anchoring is now implemented.
+### Acceptance criteria — partially done 2026-09-14
+- [x] Anchors are in the evaluator's system prompt, clearly separated from the real
+      round's evidence so they cannot be confused with it. Went with option (a) (generic,
+      module-agnostic) per this card's own recommendation —
+      `RoundEvaluator.CALIBRATION_ANCHORS`, inserted after `module.rubric()`, labelled
+      "CALIBRATION EXAMPLES (not this round's candidate...)". Structural separation
+      verified by `TurnOrchestratorIntegrationTest
+      .evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric`: the rubric's real
+      dimension strings appear before the anchor block, and the anchor block never leaks
+      into the conversation message carrying the round's actual signals/transcript.
+- [ ] **Not done — needs live quota.** A before/after comparison against a live model.
+      This environment had no LLM API key/quota available. Someone with quota should: take
+      one real round's already-recorded signals + transcript, run it through the evaluator
+      with and without the anchor block (temporarily comment it out for the "without" run),
+      and write down what changed — a null result is still useful information. Tracked in
+      `PROJECT_PLAN.md` §3's "H5 verification note" until closed.
+- [x] `PROJECT_PLAN.md` §3 updated to reflect anchoring is now implemented, with the same
+      live-verification gap noted rather than glossed over.
 
 ### Pitfalls
 - Anchors that are too close to a real question risk the evaluator pattern-matching

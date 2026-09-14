@@ -47,6 +47,53 @@ public class RoundEvaluator {
     private static final Duration EVAL_TIMEOUT = Duration.ofSeconds(60);
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /**
+     * H5 (docs/TASKS.md, PROJECT_PLAN.md §3): LLM-as-judge scoring is known to drift toward
+     * the middle or toward generosity without concrete anchors. Deliberately generic and
+     * module-agnostic (option (a) from the H5 card) rather than per-module — this keeps
+     * {@code evaluation} independent of module content, matching the package boundary in
+     * AGENTS.md's architecture map, and costs nothing to maintain as modules are added.
+     *
+     * <p>These are illustrative patterns, not a real transcript — the closing line of the
+     * block tells the evaluator that explicitly so it cannot mistake them for this round's
+     * own evidence. Inserted after {@code module.rubric()} in {@link #buildRequest}, its own
+     * clearly-labelled block, never mixed into the rubric text itself — so no module's
+     * {@code rubricVersion()} needs bumping for this.
+     */
+    private static final String CALIBRATION_ANCHORS = """
+            CALIBRATION EXAMPLES (not this round's candidate — illustrative only):
+
+            These show the difference between a 1-2 (below bar) and a 4-5 (above bar)
+            response, for ANY dimension in the rubric above. Apply the same standard to the
+            real evidence below, whatever that round's actual dimensions and question were.
+
+            BELOW THE BAR (1-2) looks like this: the candidate asserts a conclusion with no
+            mechanism behind it, and gives up the first time they're pushed. Example: asked
+            how their design stays correct under concurrent access, the candidate says "it
+            would just work." Pushed once — "what if two threads update it at the same
+            time?" — they reply "I guess we'd add a lock somewhere," naming no specific lock,
+            no specific data it protects, and no reason it would actually prevent the race.
+            Confident-sounding language does not raise this score; the absence of a named,
+            checkable mechanism is what caps it low, whether the candidate sounds unsure or
+            sounds completely certain while saying nothing concrete.
+
+            ABOVE THE BAR (4-5) looks like this: the candidate names an actual mechanism and
+            engages with a push-back by reasoning about the new constraint, not by repeating
+            themselves or caving. Example: asked the same concurrency question, the candidate
+            says "I'd lock per bucket in the hash map rather than one global lock, so updates
+            to different keys don't block each other — costs more memory for the lock array,
+            but concurrent writes to different keys proceed in parallel." Pushed further —
+            "what if two threads update the SAME key at once?" — they correctly identify that
+            the per-bucket lock already covers that case and explain why, rather than
+            introducing a new, unrelated fix or simply agreeing there might be a problem.
+
+            The generalizable signal, across every dimension in this rubric: specific beats
+            vague, a named mechanism beats a gesture at one, and engaging with a push-back
+            with adapted reasoning beats repeating the same answer or immediately conceding.
+            Score what was actually demonstrated in the real evidence below against that
+            standard — these two examples are calibration, not this round's transcript.
+            """;
+
     private final SessionRoundRepository roundRepo;
     private final SignalRepository signalRepo;
     private final RoundEvaluationRepository evaluationRepo;
@@ -126,7 +173,7 @@ public class RoundEvaluator {
                 actually demonstrated, and quote or paraphrase real evidence for every strength and
                 gap you name.
 
-                """ + module.rubric();
+                """ + module.rubric() + "\n" + CALIBRATION_ANCHORS;
 
         StringBuilder evidence = new StringBuilder("RECORDED SIGNALS (already collected during the round):\n");
         if (signals.isEmpty()) {
