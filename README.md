@@ -45,6 +45,19 @@ You can also add or switch API keys from the settings UI at runtime — no resta
 is already exported in your shell. `start-docker.sh` requires Docker with the Compose
 plugin, and will create `.env` from the example for you on first run.
 
+### Or, one process
+
+```bash
+./mvnw clean package -Ppackaged   # builds the React app and bundles it into the jar
+java -jar target/*.jar            # one process, one port — http://localhost:8123
+```
+
+This builds the frontend with the system's own npm (the `-Ppackaged` profile is opt-in —
+everyday `./mvnw test` / `clean compile` stay fast and never touch `web/`) and serves it
+from Spring Boot alongside `/api` and `/ws`, so there's a single port for the whole app
+instead of two. Good for a "just run it" checkout; `npm run dev`'s hot-reload two-process
+flow above is still the faster loop for active frontend development.
+
 ---
 
 ## Architecture at a glance

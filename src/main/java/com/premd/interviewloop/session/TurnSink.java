@@ -36,6 +36,13 @@ public interface TurnSink {
     /** Token usage and estimated cost for the turn. */
     void usage(int inputTokens, int outputTokens, int cacheReadTokens, double costUsd);
 
+    /**
+     * The session's cumulative cost has crossed the configured ceiling (D-7). Informational
+     * only — the round is never blocked. Sent once per session, the first time the ceiling
+     * is crossed. Defaulted so non-WebSocket sinks keep working as the protocol gains this.
+     */
+    default void costWarning(double sessionCostUsd, double ceilingUsd) {}
+
     /** The turn is finished and the candidate may respond. */
     void turnComplete(Long roundId);
 

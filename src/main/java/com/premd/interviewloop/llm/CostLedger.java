@@ -58,6 +58,15 @@ public class CostLedger {
         return saved;
     }
 
+    /**
+     * Total recorded cost for a session so far (across every round in it). Used to check a
+     * session against the cost ceiling (D-7) after each turn's cost is recorded.
+     */
+    public double sessionCostSoFar(Long sessionId) {
+        Double sum = repository.sumCostBySessionId(sessionId);
+        return sum == null ? 0.0 : sum;
+    }
+
     private double estimateCost(String providerId, LlmEvent.Usage usage) {
         return providersConfig.getProviderEntry(providerId)
                 .filter(p -> p.pricing != null)

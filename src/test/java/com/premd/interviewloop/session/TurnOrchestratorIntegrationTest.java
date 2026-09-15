@@ -21,20 +21,20 @@ import com.premd.interviewloop.interviewer.InterviewerTools;
 import com.premd.interviewloop.interviewer.ModuleRegistry;
 import com.premd.interviewloop.interviewer.RoundContext;
 import com.premd.interviewloop.llm.*;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedLlmProvider;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.ScriptedProviderFactory;
+import com.premd.interviewloop.testsupport.ScriptedProviderSupport.TestProviderConfig;
 import com.premd.interviewloop.transcript.TranscriptService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import reactor.core.publisher.Flux;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_MODEL_ID;
+import static com.premd.interviewloop.testsupport.ScriptedProviderSupport.MOCK_PROVIDER_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -51,90 +51,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * </ol>
  */
 @SpringBootTest
-@Import(TurnOrchestratorIntegrationTest.TestProviderConfig.class)
+@Import(TestProviderConfig.class)
 class TurnOrchestratorIntegrationTest {
-
-    private static final String MOCK_PROVIDER_ID = "mock-test-provider";
-    private static final String MOCK_MODEL_ID = "mock-model-v1";
-
-    @TestConfiguration
-    static class TestProviderConfig {
-        @Bean
-        public ScriptedProviderFactory scriptedProviderFactory() {
-            return new ScriptedProviderFactory();
-        }
-    }
-
-    static class ScriptedProviderFactory implements ProviderFactory {
-        private final ScriptedLlmProvider provider = new ScriptedLlmProvider();
-
-        @Override
-        public String id() {
-            return MOCK_PROVIDER_ID;
-        }
-
-        @Override
-        public LlmProvider create(String apiKey) {
-            return provider;
-        }
-
-        public ScriptedLlmProvider getProvider() {
-            return provider;
-        }
-    }
-
-    static class ScriptedLlmProvider implements LlmProvider {
-        private final Queue<List<LlmEvent>> responseQueue = new ConcurrentLinkedQueue<>();
-        private final List<LlmRequest> recordedRequests = Collections.synchronizedList(new ArrayList<>());
-        private final AtomicInteger callCount = new AtomicInteger(0);
-
-        public void enqueueResponse(List<LlmEvent> events) {
-            responseQueue.add(events);
-        }
-
-        public void reset() {
-            responseQueue.clear();
-            recordedRequests.clear();
-            callCount.set(0);
-        }
-
-        public int getCallCount() {
-            return callCount.get();
-        }
-
-        public List<LlmRequest> getRecordedRequests() {
-            return recordedRequests;
-        }
-
-        @Override
-        public String id() {
-            return MOCK_PROVIDER_ID;
-        }
-
-        @Override
-        public String displayName() {
-            return "Scripted Mock Provider";
-        }
-
-        @Override
-        public Capabilities capabilities() {
-            return new Capabilities(true, true, Capabilities.PromptCachingMode.NONE, false);
-        }
-
-        @Override
-        public Flux<LlmEvent> stream(LlmRequest request) {
-            callCount.incrementAndGet();
-            recordedRequests.add(request);
-            List<LlmEvent> events = responseQueue.poll();
-            if (events == null) {
-                events = List.of(
-                        LlmEvent.textDelta("Default mock response"),
-                        LlmEvent.usage(new LlmEvent.Usage(10, 10, 0, 0)),
-                        LlmEvent.done());
-            }
-            return Flux.fromIterable(events);
-        }
-    }
 
     @Autowired
     private TurnOrchestrator turnOrchestrator;
@@ -346,6 +264,61 @@ class TurnOrchestratorIntegrationTest {
                 .findByCompanyProfileIdAndModuleTypeOrderByTakenAtDesc("google", "dsa");
         assertThat(snapshots).hasSize(1);
         assertThat(snapshots.get(0).getComparabilityEpoch()).isEqualTo(evaluatorEpoch);
+    }
+
+    /**
+     * H5 (docs/TASKS.md, PROJECT_PLAN.md §3): the evaluator's system prompt must carry the
+     * calibration anchors, clearly separated from the module's own rubric text so the model
+     * cannot confuse the illustrative examples with this round's real dimensions or evidence.
+     */
+    @Test
+    void evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric() {
+        // Deliberately not "google" — finalEvaluation_createsSessionReportAndEpochTaggedSnapshot
+        // asserts exactly one readiness snapshot for google/dsa, and this class doesn't roll
+        // back between tests, so reusing that company+module pair here would break its count.
+        InterviewSession session = sessionManager.createSingleModuleSession(
+                "microsoft", ModuleType.DSA, "medium", MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        Long roundId = session.getRounds().get(0).getId();
+
+        turnOrchestrator.beginRound(roundId, TurnSink.noop());
+        sessionManager.completeRound(roundId);
+
+        settingsStore.setEvaluator(MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        mockProvider.enqueueResponse(List.of(
+                LlmEvent.toolCall(EvaluationTools.SUBMIT_EVALUATION, "call_eval_2", Map.of(
+                        "scores", Map.of("clarification", 3),
+                        "strengths", List.of("Engaged with the problem."),
+                        "gaps", List.of("Limited depth."),
+                        "narrative_md", "Adequate.")),
+                LlmEvent.usage(new LlmEvent.Usage(90, 30, 0, 0)),
+                LlmEvent.done()
+        ));
+
+        roundEvaluator.evaluate(roundId);
+
+        LlmRequest lastRequest = mockProvider.getRecordedRequests()
+                .get(mockProvider.getRecordedRequests().size() - 1);
+        String system = lastRequest.getSystemMessages().get(0).getContent();
+
+        // The anchor block is present, clearly labelled, and explicitly disclaims being this
+        // round's real candidate — not just present, but present as its own labelled section.
+        assertThat(system)
+                .contains("CALIBRATION EXAMPLES")
+                .contains("not this round's candidate")
+                .contains("BELOW THE BAR")
+                .contains("ABOVE THE BAR");
+
+        // Structural separation: the module's rubric (a real dimension string) comes first,
+        // the calibration block after it — never interleaved with or ahead of the rubric.
+        int rubricIndex = system.indexOf("clarification");
+        int anchorIndex = system.indexOf("CALIBRATION EXAMPLES");
+        assertThat(rubricIndex).isGreaterThanOrEqualTo(0);
+        assertThat(anchorIndex).isGreaterThan(rubricIndex);
+
+        // The anchors live in the system message only — never inside the evidence/conversation
+        // message that carries this round's actual signals and transcript.
+        String evidenceMessage = lastRequest.getConversationMessages().get(0).getContent();
+        assertThat(evidenceMessage).doesNotContain("CALIBRATION EXAMPLES");
     }
 
     @Test

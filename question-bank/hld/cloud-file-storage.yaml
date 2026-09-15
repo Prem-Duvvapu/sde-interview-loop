@@ -1,0 +1,96 @@
+# Original prompt, written for this project. "Design a cloud file storage/sync service" is
+# a generic, widely used system-design exercise pattern, not proprietary text — but the
+# numbers, requirements, constraints and interviewer notes below are original to this
+# project (see D-5 in PROJECT_PLAN.md).
+slug: cloud-file-storage
+title: Cloud File Storage & Sync Service
+difficulty: medium-hard
+tags:
+  - storage
+  - capacity-estimation
+  - consistency-tradeoffs
+
+statement: >
+  Design the backend for a cloud file storage and sync service, in the shape of a
+  simplified Dropbox: a user uploads files from one device and the same files become
+  available on their other devices.
+
+  Functional requirements:
+  - `uploadFile(userId, file)` — stores a file and makes it available to the user's other
+    devices.
+  - `downloadFile(userId, fileId)` — retrieves a stored file.
+  - `listChanges(userId, sinceVersion)` — lets a device ask "what changed since I last
+    synced" rather than re-downloading everything on every sync.
+  - Files can be large (up to a few GB) and users may have unreliable connections — an
+    upload that fails partway through should not require restarting from byte zero.
+  - Two devices editing the same file while both offline, then both reconnecting, is a
+    real scenario you should at least address — it does not need a full merge algorithm,
+    but name the approach.
+
+  Scale to design for:
+  - 50 million users, averaging 5 GB stored per user (roughly 250 PB total, order of
+    magnitude).
+  - 10 million file uploads per day across all users.
+  - Reads (downloads and sync checks) outnumber writes (uploads) roughly 10:1.
+
+constraints:
+  - You may assume a managed blob store (for raw file bytes) and a managed database (for
+    metadata) are available; the interesting decisions are how you use and connect them,
+    not vendor choice.
+  - Sketch the API briefly, then spend your time on the storage architecture, the
+    chunking/resume strategy, and the metadata model — not on client UI.
+
+example: >
+  A user uploads a 2 GB video from their laptop. Their phone, syncing later, calls
+  listChanges and learns a new file exists without re-scanning the whole account;
+  downloadFile then retrieves it. If the laptop's upload was interrupted at 1.5 GB by a
+  dropped connection, resuming should not re-send the first 1.5 GB.
+
+interviewer_notes: >
+  Estimation anchors: 250 PB total should visibly shape the design — this is blob-store
+  territory (object storage built for exabyte scale), not "a bigger relational database,"
+  and a candidate proposing to store raw file bytes IN a relational database has a real
+  bottleneck_identification gap worth naming directly. 10M uploads/day is roughly 115
+  writes/sec average — unremarkable on its own — while the 10:1 read ratio means the
+  sync/download path, not the upload path, carries most of the request volume and most of
+  the latency sensitivity; a design that over-invests in write-path cleverness while
+  hand-waving the read/sync path has its attention pointed the wrong way.
+
+  Expected shape: a blob store for raw file content addressed by a CONTENT HASH rather
+  than a user-supplied filename — this naturally gives free deduplication (two users
+  uploading the identical file, or one user's file unchanged across a version, share the
+  same underlying blob) and is the single best differentiator between a candidate who has
+  actually thought about this problem and one reciting "we'd use S3." A metadata database
+  (file id, owner, version, chunk list, blob references) stays separate from the blob
+  store. Chunking large files into fixed-size blocks, each hashed and uploaded
+  independently, is what makes BOTH resume-after-failure (re-send only missing chunks) and
+  chunk-level dedup (not just whole-file dedup) possible — push directly if chunking never
+  comes up: "how does a 2GB upload survive a dropped connection at 1.5GB without starting
+  over?"
+
+  Sync mechanism: for listChanges, expect a per-user (or per-file) monotonically
+  increasing version/sequence number the client passes as `sinceVersion`, answered by the
+  metadata DB via an index on that column. This is the component_design probe for whether
+  "what changed since X" connects to an actual queryable mechanism, or stays a sentence of
+  prose with nothing backing it.
+
+  Conflict handling: deliberately underspecified to see what a candidate reaches for.
+  Acceptable answers range from "last-write-wins by timestamp, and name the resulting data
+  loss as a known trade-off" to "keep both versions as a conflicted copy and let the user
+  resolve it" (closer to real-world practice). The actual failure mode is not which answer
+  they pick — it's not noticing the conflict is even possible when two offline devices
+  both edited the same file. Push once if it's never raised: "two devices, same file, both
+  offline, both edited — then both reconnect. What happens?"
+
+  Bottleneck to surface: the metadata database, once every upload/sync/list call touches
+  it, is the natural hot spot at this read:write ratio — ask what changes if metadata
+  query latency degrades under load (read replicas for the metadata DB is the expected
+  first move; the blob store itself scales horizontally more easily and is less likely to
+  be where they should focus attention).
+
+  Common SDE-2 failure modes: saying "we'd use S3" as if naming a managed blob store alone
+  answers the metadata/versioning/sync design — the problem already grants a blob store as
+  a constraint, so naming it isn't the architecture; proposing to diff raw file contents
+  byte-by-byte to detect changes instead of using version numbers or content hashes;
+  ignoring the chunking requirement and treating uploadFile as one atomic all-or-nothing
+  transfer despite the explicit "should not require restarting from byte zero" requirement.

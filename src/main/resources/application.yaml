@@ -49,3 +49,10 @@ spring:
 app:
   profiles-dir: company-profiles
   providers-config: config/providers.yaml
+  # D-7 (PROJECT_PLAN.md §5.3): resolved as warn-only, no hard stop — a bad bill is a worse
+  # experience than a mid-interview refusal for a single-user local app. $5 covers a normal
+  # full company loop several times over at Gemini flash pricing (input $0.75/output $3.75
+  # per Mtok) and is still well inside a single full loop at Claude Opus pricing
+  # (input $5/output $25 per Mtok) — see config/providers.yaml. Warns once per session when
+  # crossed; never blocks a turn.
+  cost-ceiling-usd: 5.00

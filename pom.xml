@@ -138,4 +138,88 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          C8 (docs/COMPLETION_PLAN.md): builds the React app and bundles it into the jar so
+          `java -jar target/*.jar` serves the whole product from one process, one port —
+          Spring Boot's default static-resource handling serves classpath:/static/** at "/"
+          automatically, and /api and /ws are already mapped controllers/handlers, which
+          Spring resolves before falling through to static resources, so nothing else changes.
+
+          Deliberately a profile, not part of the default lifecycle: `./mvnw test` and
+          `clean compile` (what CI and everyday dev use) must stay fast and must not require
+          npm on PATH. Only `./mvnw clean package -Ppackaged` builds the frontend. The
+          two-process `npm run dev` flow is untouched — this is additive, not a replacement.
+
+          Uses the system's own npm (already required for `cd web && npm install`, per the
+          Quick start section in README.md) via exec-maven-plugin, rather than a plugin that
+          downloads its own Node — this project runs BYO-Node already, and downloading a
+          second one at package time would be redundant.
+        -->
+        <profile>
+            <id>packaged</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.4.1</version>
+                        <executions>
+                            <execution>
+                                <id>npm-install</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>npm</executable>
+                                    <workingDirectory>${project.basedir}/web</workingDirectory>
+                                    <arguments>
+                                        <argument>ci</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>npm-build</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>npm</executable>
+                                    <workingDirectory>${project.basedir}/web</workingDirectory>
+                                    <arguments>
+                                        <argument>run</argument>
+                                        <argument>build</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>copy-frontend-dist</id>
+                                <phase>process-resources</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.basedir}/web/dist</directory>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -161,6 +161,67 @@ Related: the round-2-transition dead-air gap is a UX/observability issue, distin
 H4's disconnect-recovery gap (which is about the frontend recovering after losing the WS
 connection entirely, not about a slow-but-still-connected evaluator). Track separately.
 
+### Findings (2026-09-14) — general practice, voice controls, settings; still no key
+
+Verified with a real Chromium browser (Playwright, `chromium.launch` directly — `chromium-cli`
+is not available in this environment) against a locally-running backend + Vite dev server.
+**No LLM API key was available in this environment at all** (checked `GEMINI_API_KEY`,
+`GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` — all unset), so this pass covers
+what's reachable without one: Setup, general practice (shipped since the last walkthrough,
+never browser-verified before this), Settings, and voice controls. A full round, phase
+transitions, Replay, and the full-loop transition all still need a real key and remain
+exactly as open as the 2026-09-05 findings above.
+
+- **Found and fixed a real bug:** no favicon was ever declared (`web/index.html` had no
+  `<link rel="icon">`, and no `web/public/` directory existed at all), so the browser's
+  automatic `/favicon.ico` request 404'd on **every single page load**, every time,
+  deterministically. Confirmed via `curl -o /dev/null -w '%{http_code}' /favicon.ico` → 404,
+  and via a clean console-error capture before/after. Fixed with
+  `<link rel="icon" href="data:," />` — an explicit empty icon that stops the browser
+  requesting one at all, rather than picking a design on the app's behalf. Verified the
+  404 and its console error are both gone after the fix.
+  **This is probably not the same bug as the "Maximum update depth exceeded" + burst-of-9×-404s
+  finding above** — that one was intermittent (2/7 attempts) and specifically tied to
+  entering the interview view for a full-loop round, whereas the favicon 404 is
+  deterministic and present on every load regardless of flow. Both are 404s, but likely
+  unrelated; that mystery is still open and still needs its own repro.
+- **General practice (Setup panel) — clean, no console errors,** at 1440px, 1080px, and
+  375px. Renders its own copy ("Choose one module and difficulty without company-specific
+  quirks..."), a single-module-only control set (no full-loop toggle, matching the backend's
+  400 on that combination — see `SessionControllerTest`), and a distinct "Start mock" button
+  label instead of "Start round." Never browser-verified before this pass.
+- **Starting a general-practice round — reaches the real interview view cleanly**, no
+  console errors, no crash. Phase strip, transcript pane, Monaco code editor with its
+  placeholder comment, and the composer all render correctly. Confirms live, for the first
+  time, exactly what happens with no provider key configured: `beginRound` resolves a
+  provider *before* rendering the opening brief (even though the brief itself is a local
+  template, not an LLM call) and fails fast with a clean, non-crashing transcript error —
+  `"The configured interviewer provider 'google' is not available. Configured providers: [].
+  Check that its API key is set."` No white screen, no unhandled exception. This is the
+  answer to "what does a first-run user with no key yet actually see," confirmed rather
+  than assumed.
+- **Voice controls — both pieces work with no console errors.** The mic ("Use mic") button
+  is enabled in headless Chromium with title "Dictate your answer" — `SpeechRecognition`'s
+  JS API surface exists in Chromium/Chrome even headless (actual recognition would still
+  need a real mic and user permission in a non-headless context; this only confirms
+  `supportsRecognition()` correctly detects the API and doesn't crash). The "Voice off" /
+  "Voice on" TTS toggle in the interview header toggles cleanly with no errors. Genuinely
+  unsupported-browser behavior (Safari/Firefox, where the mic button should show
+  `disabled` with the "not supported" title) is **still unverified** — this environment
+  only has Chromium.
+- **Settings overlay — clean, no unexpected console errors.** Shows "Gemini — no key"
+  correctly for the interviewer/evaluator role bindings, the resume upload section
+  ("No resume on file yet."), and provider capability cards (Claude, OpenAI, Gemini,
+  DeepSeek) with their badges. One 404 fires when the overlay opens
+  (`GET /api/resume` → 404) — **confirmed intentional**, not a bug: `ResumeController`
+  deliberately returns 404 to mean "no resume yet" (its own `ResponseEntity.status(NOT_FOUND)`
+  branch), and the frontend already renders "No resume on file yet." from it without
+  incident. Distinct from the favicon 404: that one had no purpose, this one is the API's
+  actual absence signal.
+
+Not reached, same as before: Replay, disconnect/reconnect, a full-loop transition, and the
+round-2 dead-air state — all still need a live LLM call this environment cannot make.
+
 ---
 
 ## H2 — Measure and document Gemini prompt-cache behaviour
@@ -296,10 +357,17 @@ it belongs there or as a new small config).
    consistent pattern (see how `usage` frames already work in `FrameCodec`).
 3. Update `PROJECT_PLAN.md` §5.3 D-7 to record the resolution.
 
-**Acceptance criteria:**
-- [ ] A session that crosses the threshold visibly warns (verify with a low threshold set
-      deliberately low for the test, not by running up a real bill).
-- [ ] D-7 is marked resolved in `PROJECT_PLAN.md`, with the reasoning.
+**Acceptance criteria — done 2026-09-14:**
+- [x] A session that crosses the threshold visibly warns (verify with a low threshold set
+      deliberately low for the test, not by running up a real bill). Verified via
+      `CostCeilingTest` (`app.cost-ceiling-usd=0.01`): warns exactly once when crossed,
+      stays silent while under, never repeats on a later turn. **Not verified live in the
+      browser** — the frontend has no UI for the new `cost_warning` frame yet; it falls
+      through `frames.ts`'s existing graceful "unknown frame" path (a console warning + a
+      low-priority system message), confirmed by reading that code, not by opening a
+      browser. Adding real UI for it is a follow-up, not done here.
+- [x] D-7 is marked resolved in `PROJECT_PLAN.md`, with the reasoning: warn-only, no hard
+      stop, `app.cost-ceiling-usd` default $5.00, warns once per session.
 
 ### H4b — Disconnect recovery: resume shows the existing transcript
 
@@ -414,12 +482,24 @@ measurement showing whether that is happening here.
    have one, to avoid a fresh live call) and run it through the evaluator with and without
    the anchors. Compare the scores. Write down what changed.
 
-### Acceptance criteria
-- [ ] Anchors are in the evaluator's system prompt, clearly separated from the real
-      round's evidence so they cannot be confused with it.
-- [ ] A before/after comparison exists and is written down — even a null result ("no
-      visible change on this example") is useful information, record it either way.
-- [ ] `PROJECT_PLAN.md` §3 updated to reflect anchoring is now implemented.
+### Acceptance criteria — partially done 2026-09-14
+- [x] Anchors are in the evaluator's system prompt, clearly separated from the real
+      round's evidence so they cannot be confused with it. Went with option (a) (generic,
+      module-agnostic) per this card's own recommendation —
+      `RoundEvaluator.CALIBRATION_ANCHORS`, inserted after `module.rubric()`, labelled
+      "CALIBRATION EXAMPLES (not this round's candidate...)". Structural separation
+      verified by `TurnOrchestratorIntegrationTest
+      .evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric`: the rubric's real
+      dimension strings appear before the anchor block, and the anchor block never leaks
+      into the conversation message carrying the round's actual signals/transcript.
+- [ ] **Not done — needs live quota.** A before/after comparison against a live model.
+      This environment had no LLM API key/quota available. Someone with quota should: take
+      one real round's already-recorded signals + transcript, run it through the evaluator
+      with and without the anchor block (temporarily comment it out for the "without" run),
+      and write down what changed — a null result is still useful information. Tracked in
+      `PROJECT_PLAN.md` §3's "H5 verification note" until closed.
+- [x] `PROJECT_PLAN.md` §3 updated to reflect anchoring is now implemented, with the same
+      live-verification gap noted rather than glossed over.
 
 ### Pitfalls
 - Anchors that are too close to a real question risk the evaluator pattern-matching
@@ -438,11 +518,16 @@ starting.
 
 ### H6a — Grow the remaining question banks (agent-doable)
 
-DSA grew from 5 to 11 (PR #1); **LLD (5), HLD (4), Java deep-dive (6), and CS fundamentals
-(2 packs) have not grown.** Follow the exact process in the original T8 card below
-(original prose only, filename stem = slug, `interviewer_notes` required, hand-verify every
-worked example, restart to validate at boot). Prioritise LLD and HLD — smaller banks, and
-the ones most likely to repeat for the owner soonest.
+DSA grew from 5 to 11 (PR #1); LLD grew from 5 to 7 (added `elevator-system` — concurrency
++ dispatch strategy pattern + direction-aware state machine — and `movie-ticket-booking` —
+atomic multi-seat holds + automatic expiry + pricing decorator); HLD grew from 4 to 6
+(added `distributed-rate-limiter` — global-vs-local accuracy trade-off under a hot-path
+latency budget — and `cloud-file-storage`, capped at `medium-hard` per the pinned
+`HldQuestionBankTest` bar, not `hard` — content-addressed chunking/dedup + sync versioning
++ offline-conflict handling). **Java deep-dive (6) and CS fundamentals (2 packs) have not
+grown.** Follow the exact process in the original T8 card below (original prose only,
+filename stem = slug, `interviewer_notes` required, hand-verify every worked example,
+restart to validate at boot). Java deep-dive and CS fundamentals are what's left.
 
 ### H6b — Validate profiles from first-hand data (owner-only — do not attempt this half)
 

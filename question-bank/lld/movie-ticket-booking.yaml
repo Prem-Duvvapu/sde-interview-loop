@@ -1,0 +1,72 @@
+# Original prompt, written for this project. "Design a movie ticket booking system" is a
+# generic, widely used LLD exercise pattern, not proprietary text — but the requirements,
+# constraints and interviewer notes below are original to this project (see D-5 in
+# PROJECT_PLAN.md).
+slug: movie-ticket-booking
+title: Movie Ticket Booking System
+difficulty: medium
+tags:
+  - concurrency
+  - strategy-pattern
+  - object-modeling
+
+statement: >
+  Design the core classes for a single-cinema movie ticket booking system.
+
+  - A show is one screening of one movie, in one screen, at one time, with a fixed seat
+    layout.
+  - `getAvailableSeats(show)` — returns which seats are currently free for that show.
+  - `holdSeats(show, seats, userId)` — temporarily reserves the requested seats for this
+    user so no one else can book them while they complete payment. The hold expires
+    automatically after a fixed timeout if it is never confirmed.
+  - `confirmBooking(booking, paymentDetails)` — finalizes a hold into a paid booking and
+    computes the price.
+  - Pricing differs by seat type (e.g. regular vs premium), and separately the cinema
+    wants to run promotional pricing (e.g. a weekday discount) without touching the core
+    booking logic.
+
+constraints:
+  - Single cinema, single process — no cross-theater or distributed concerns.
+  - Two different users concurrently trying to hold the same seat for the same show must
+    never both succeed — exactly one hold should win, and the other should fail clearly.
+  - A held-but-unconfirmed seat must become available again automatically once its hold
+    expires, without requiring another user's request to trigger the cleanup.
+
+example: >
+  User A calls holdSeats(show, [B4, B5], "userA") and succeeds. One second later, user B
+  calls holdSeats(show, [B4, B6], "userB") — this must fail for the WHOLE request, even
+  though B6 was free, because holdSeats is all-or-nothing per call. If user A never
+  confirms within the hold window, B4 and B5 become bookable again automatically.
+
+interviewer_notes: >
+  Expected shape: Show (movie/screen/time/seat layout), Seat (id/type/status — AVAILABLE,
+  HELD, BOOKED), Booking (seats/user/status/holdExpiry), and a PricingStrategy interface
+  (seat-type-aware base pricing) with promotions layered on top via composition or a
+  decorator rather than branching inside the core price calculation — this is the
+  SOLID/extensibility probe, the same shape as the parking-garage question's pricing
+  requirement but now paired with a hold/expiry lifecycle that question doesn't have.
+
+  Concurrency is more central here than in most of this bank: holdSeats across MULTIPLE
+  seats must be atomic — either all requested seats transition to HELD or none do. A
+  partial hold (2 of 3 seats succeed, the third fails, and the first two are left silently
+  stuck) is a real correctness bug, not an edge case — push directly: "what does holdSeats
+  do if B4 succeeds but B5 is already held by someone else — do you roll back B4?" The
+  expected answer reaches for either a deterministic per-show lock ordering across the
+  requested seats (to avoid deadlock between two concurrent multi-seat holds that want
+  overlapping seats in different orders) or a compare-and-swap-style per-seat status
+  transition with rollback of any partial success. A candidate who holds seats one at a
+  time with no rollback path has a real class_model/concurrency gap worth naming directly.
+
+  Expiry: the requirement that a hold clears "automatically... without requiring another
+  user's request" rules out lazy expiry-on-read (only checking a hold's expiry when the
+  next holdSeats call happens to touch that seat) as a COMPLETE answer, even though it's a
+  reasonable partial one. Push if that's all that's proposed: "what if nobody tries to
+  book that seat again for a week — does it stay HELD forever?" A scheduled sweep (a
+  background task, or a delayed task per hold) is the expected mechanism; identifying only
+  the lazy-check half is real signal for extensibility, not a nitpick.
+
+  Common SDE-2 failure modes: collapsing "held" and "booked" into one status, which erases
+  the entire point of the timeout; computing and charging a price before payment is
+  confirmed to have succeeded; implementing promotional pricing as an if-statement inside
+  the core price calculation instead of behind the swappable interface the requirements
+  explicitly ask for.

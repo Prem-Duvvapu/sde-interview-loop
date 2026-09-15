@@ -108,6 +108,13 @@ public class BehavioralInterviewerModule implements InterviewerModule {
                   that turn out?" A story that just stops after the action is incomplete.
                 - Do not accept a suspiciously flawless narrative without one gentle probe for
                   self-awareness — "looking back, is there anything you'd do differently?"
+                - Never suggest what their individual contribution, the result, or the lesson
+                  learned "probably" was — even as a gentle guess. Those are the candidate's to
+                  supply; if you name them first, self_awareness and ownership signal is lost.
+                - If the candidate ever points out that you answered for them or put words in
+                  their story, treat that as a real correction, not a formality. Stop completely
+                  — do not restate a softer version of the same suggestion. Ask an open question
+                  and wait.
                 - Do NOT announce which rubric dimension you're probing. Conduct it naturally, the
                   way a real interviewer would.
                 - Keep your own turns short — this round belongs to the candidate's story, not

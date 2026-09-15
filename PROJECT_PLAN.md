@@ -530,9 +530,21 @@ driven by `min_sessions_for_confidence`.
 
 **The honest limitation:** this measures you against a *model's* idea of each company's
 bar, seeded by profiles I generated. It is a rehearsal instrument and a drift detector,
-not a calibrated predictor. Phase 7 includes anti-inflation measures (fixed rubric text,
-anchored few-shot examples at each band, evaluator separated from interviewer). None of
-that makes the absolute numbers trustworthy — the *trend* is the trustworthy part.
+not a calibrated predictor. Phase 7's anti-inflation measures are fixed rubric text,
+anchored few-shot examples at each band (H5, `RoundEvaluator.CALIBRATION_ANCHORS` —
+module-agnostic per-band examples of evidence quality and response-to-pushback, inserted
+after `module.rubric()` in the evaluator's system prompt, clearly labelled so they cannot
+be mistaken for the real round's evidence), and evaluator separated from interviewer. None
+of that makes the absolute numbers trustworthy — the *trend* is the trustworthy part.
+
+**H5 verification note:** the anchors' presence and structural separation from the real
+round's evidence is covered by
+`TurnOrchestratorIntegrationTest.evaluatorSystemPromptIncludesCalibrationAnchorsAfterTheRubric`.
+**Not done:** an actual before/after score comparison against a live model — this
+environment had no LLM API key/quota available to run one. That measurement (H5 step 4:
+replay a real round's already-recorded signals and transcript through the evaluator with
+and without the anchor block, compare the scores) is still open and needs the owner's
+quota to close honestly rather than being asserted without evidence.
 
 ---
 
@@ -583,8 +595,10 @@ multi-round loop without burning excessive quota.
 **Phase 7 — Evaluation, reports, dashboard, replay.** *Core flow implemented.* Per-round
 evaluation writes session reports once the final evaluation exists; readiness snapshots and
 trend points retain their comparability epoch; the dashboard presents report, history,
-module scores and trends, and links into replay. Remaining hardening: anchored examples to
-reduce evaluator inflation and a browser-based replay/dashboard walkthrough.
+module scores and trends, and links into replay. Anchored calibration examples landed (H5,
+see §3) — structurally verified, but the live before/after inflation measurement H5 called
+for is still open, blocked on LLM quota. Remaining hardening: that measurement, and a
+browser-based replay/dashboard walkthrough.
 
 **Phase 8 — Voice mode.** *Browser-native foundation implemented.* A small frontend
 `VoiceProvider` boundary now supplies opt-in text-to-speech for completed interviewer replies
@@ -716,17 +730,24 @@ shapes differ" for how it's pinned by content hash so a mid-round re-upload can'
 what the round is scored against — and its "Never commit API keys" note, extended to
 resume content, since this is the most sensitive personal data this app now handles.
 
-### D-7 — Per-session cost ceiling *(Phase 9)*
-A full 4-hour loop is many hundreds of streamed turns. `llm_call` records per-call cost,
-so the data to decide this is being collected — but **no real $/round figure has been
-measured yet**, partly because `config/providers.yaml` still has `<set-me>` for Gemini
-pricing, so `cost_estimate_usd` currently computes as 0. Filling in real pricing is a
-prerequisite to deciding whether the app enforces a hard ceiling, warns, or just reports.
+### D-7 — Per-session cost ceiling. Resolved: warn-only, no hard stop.
+Real pricing landed in T1 (`config/providers.yaml`, Gemini included), so `cost_estimate_usd`
+is real rather than always 0. `TurnOrchestrator` now sums session cost
+(`CostLedger.sessionCostSoFar`, wrapping the `sumCostBySessionId` query that already
+existed) after every turn's cost is recorded, and sends a `cost_warning` WS frame
+(`FrameCodec`/`TurnSink`, same pattern as the existing `usage` frame) the first time a
+session crosses a configured ceiling — `app.cost-ceiling-usd` in `application.yaml`,
+default $5.00. Sent once per session (an in-memory set, same lifetime and reset-on-restart
+behaviour as the existing per-round hint-level tracking), never repeated on every
+subsequent turn, and **never blocks a turn** — a hard stop mid-interview is a worse
+experience than an unexpectedly large bill for a single-user local app, per this task's own
+original recommendation. The frontend has no UI for this frame yet; that's a follow-up, not
+part of this resolution.
 
-A related practical limit surfaced during development, worth knowing before designing this:
-the **Gemini free tier allows 20 requests/day per model**, which a couple of full rounds
-will exhaust. Quota is per-model, so switching to `gemini-3.6-flash` provides a separate
-bucket.
+A related practical limit surfaced during development, worth knowing before designing
+around cost further: the **Gemini free tier allows 20 requests/day per model**, which a
+couple of full rounds will exhaust. Quota is per-model, so switching to `gemini-3.6-flash`
+provides a separate bucket.
 
 ### D-9 — Persistence of UI-supplied API keys *(opened during Phase 1 rework)*
 `ProviderKeyStore` holds keys pasted through the settings UI **in memory only** — they are
