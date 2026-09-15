@@ -240,28 +240,48 @@ actual REST/WS/browser contracts.
 
 **Scope**
 
-- Decide whether “packaged startup” means a Maven-served production frontend, the existing
-  `start.sh`, Docker Compose, or all three. This is an owner decision if it changes the preferred
-  workflow.
-- If serving the built frontend from Spring, add a reproducible Maven/frontend build step and
-  ensure `/api` and `/ws` keep their behavior. Keep dev mode fast and documented.
-- Review `start.sh`, `start-docker.sh`, ports, shutdown behavior, data-path backups, and fresh
-  machine setup.
-- Add a release checklist: clean install, startup readiness, one local mock, backup/restore H2,
-  and no secret leakage.
+- [x] Decide whether "packaged startup" means a Maven-served production frontend, the
+  existing `start.sh`, Docker Compose, or all three. **Owner decision, asked and answered
+  2026-09-14/15: Maven-served single JAR**, additive alongside the existing `start.sh` /
+  `start-docker.sh` / `npm run dev` — none of those were removed or changed.
+- [x] If serving the built frontend from Spring, add a reproducible Maven/frontend build
+  step and ensure `/api` and `/ws` keep their behavior. Keep dev mode fast and documented.
+  Done 2026-09-15: a `packaged` Maven profile (`pom.xml`) runs `npm ci` + `npm run build`
+  (via `exec-maven-plugin`, using the system's own npm — no second Node download) then
+  copies `web/dist` into `target/classes/static` (via `maven-resources-plugin`, bound to
+  `generate-resources`/`process-resources` so it lands before `package`). Deliberately a
+  profile, not the default lifecycle: `./mvnw test`/`clean compile` never touch `web/` and
+  stay exactly as fast as before — verified live, `./mvnw clean test` still 106/106 with no
+  `target/classes/static` created when the profile isn't passed.
+- [ ] Review `start.sh`, `start-docker.sh`, ports, shutdown behavior, data-path backups, and
+  fresh machine setup. **Still open** — not touched in this pass; `start.sh`'s readiness-check
+  fix (RCA.md #13) and `start-docker.sh` are unchanged.
+- [ ] Add a release checklist: clean install, startup readiness, one local mock, backup/restore
+  H2, and no secret leakage. **Still open.**
 
 **Acceptance criteria**
 
-- A fresh local checkout reaches a usable UI with one documented command and no manual path edits.
-- The launcher terminates both backend and frontend cleanly.
-- README commands and actual ports match.
+- [x] A fresh local checkout reaches a usable UI with one documented command and no manual
+  path edits. Verified live: `./mvnw clean package -Ppackaged && java -jar target/*.jar`
+  serves the full UI at `http://localhost:8123/` — confirmed with a real Chromium browser,
+  zero console errors, identical rendering to `npm run dev`. `/api/profiles` (JSON,
+  unaffected) and a built static asset both confirmed serving correctly from the same port
+  via `curl`.
+- [ ] The launcher terminates both backend and frontend cleanly. N/A to this specific
+  addition (`java -jar` is one process, no separate frontend process to terminate) — the
+  existing `start.sh`/`start-docker.sh` termination behavior is unchanged and untouched.
+- [x] README commands and actual ports match. `README.md`'s new "Or, one process" section
+  documents the exact two commands verified above, alongside the existing two-process and
+  `start.sh`/`start-docker.sh` paths (kept, not replaced).
 
 ## Deferred/open owner decisions
 
 Do not silently choose these:
 
 1. The exact break/pause policy within a live interview and whether pauses alter planned timing.
-2. The intended packaged distribution form (single JAR, scripts, Docker, or a supported subset).
+2. ~~The intended packaged distribution form (single JAR, scripts, Docker, or a supported
+   subset).~~ **Resolved 2026-09-14/15, asked and answered: Maven-served single JAR**,
+   additive — see C8. `start.sh`/`start-docker.sh` remain available too.
 3. Any optional key-backed voice provider after browser-native speech is validated.
 4. Any claim that a company profile is calibrated or verified.
 5. Any change to the pinned evaluator/provider/model policy that affects comparability epochs.
