@@ -67,10 +67,10 @@ export function TranscriptPane({ items, awaitingReply, roundLabel }: Props) {
       <div className="transcript-scroll" ref={scrollRef}>
         {items.length === 0 && (
           <div className="empty-state">
-            <p className="empty-title">The round is open.</p>
+            <p className="empty-title">Waiting for the interviewer…</p>
             <p className="empty-body">
-              The interviewer speaks first once modules are wired. Until then, send a turn to exercise
-              the transport — your message and the editor buffer both travel on the same socket.
+              The interviewer opens with the problem. Your answers and your current code or diagram are
+              sent together each time you press Send.
             </p>
           </div>
         )}
@@ -105,12 +105,8 @@ export function TranscriptPane({ items, awaitingReply, roundLabel }: Props) {
                 </article>
               );
             case 'tool':
-              return (
-                <div className="turn turn-tool" key={item.id}>
-                  <span className="tool-name">{item.name}</span>
-                  <span className="tool-args">{summariseArgs(item.args)}</span>
-                </div>
-              );
+              // Control calls are summarised as system notices; raw arguments are never shown.
+              return null;
             case 'system':
             default:
               return (
@@ -133,13 +129,4 @@ export function TranscriptPane({ items, awaitingReply, roundLabel }: Props) {
       </div>
     </section>
   );
-}
-
-function summariseArgs(args: Record<string, unknown>): string {
-  const entries = Object.entries(args);
-  if (entries.length === 0) return '';
-  return entries
-    .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    .join('  ')
-    .slice(0, 180);
 }

@@ -197,6 +197,8 @@ from real interview experience, not as ground truth.
 |---|---|
 | **`CLAUDE.md`** | **Read first if you are working on the code** (human or AI). Current state, load-bearing invariants that fail *silently*, architecture map, working agreement. |
 | `PROJECT_PLAN.md` | Architecture, data model, rubrics, phase roadmap, and the decision register with reasoning. |
+| [UI/UX and content implementation plan](docs/UI_UX_CONTENT_IMPLEMENTATION_PLAN.md) | Phased redesign and content-quality plan grounded in the four sibling learning apps, with file pointers, acceptance gates, and an implementation-agent handoff. |
+| [Completion plan](docs/COMPLETION_PLAN.md) | Broader project completion, resilience, testing, and delivery work. |
 | `company-profiles/README.md` | Profile schema and how to edit them. |
 
 ---

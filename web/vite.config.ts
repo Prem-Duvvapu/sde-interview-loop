@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const BACKEND = 'http://localhost:8123';
+// Overridable so the browser suite can point a second dev server at the isolated e2e backend
+// (scripts/e2e-backend.sh, :8124) without touching a normal dev session on :8123.
+const BACKEND = process.env.INTERVIEW_LOOP_BACKEND ?? 'http://localhost:8123';
 
 /**
  * Dev server proxies /api and /ws to the Spring Boot app on :8123, so the

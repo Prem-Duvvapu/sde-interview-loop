@@ -170,6 +170,9 @@ class TurnOrchestratorIntegrationTest {
     private ProviderKeyStore keyStore;
 
     @Autowired
+    private com.premd.interviewloop.domain.repository.SignalRepository signalRepo;
+
+    @Autowired
     private AppSettingsStore settingsStore;
 
     @Autowired
@@ -262,6 +265,58 @@ class TurnOrchestratorIntegrationTest {
         assertThat(lastCall.getInputTokens()).isEqualTo(150);
         assertThat(lastCall.getOutputTokens()).isEqualTo(45);
         assertThat(lastCall.getCostEstimateUsd()).isNotNull();
+    }
+
+    /**
+     * Regression (RCA #14): record_signal scores/evidence and control-call rationales used to
+     * be streamed verbatim to the candidate's transcript. They must still be persisted and
+     * applied, but the client-facing sink must never see them.
+     */
+    @Test
+    void privateScoringNeverReachesTheCandidateSink() {
+        InterviewSession session = sessionManager.createSingleModuleSession(
+                GeneralPractice.ID, ModuleType.DSA, "medium", MOCK_PROVIDER_ID, MOCK_MODEL_ID);
+        Long roundId = session.getRounds().get(0).getId();
+        turnOrchestrator.beginRound(roundId, TurnSink.noop());
+
+        mockProvider.enqueueResponse(List.of(
+                LlmEvent.textDelta("Good question about negatives. "),
+                LlmEvent.toolCall(InterviewerTools.RECORD_SIGNAL, "call_sig_1", Map.of(
+                        "dimension", "clarification", "score", 4, "confidence", "medium",
+                        "evidence", "SECRET-EVIDENCE asked about negative numbers")),
+                LlmEvent.toolCall(InterviewerTools.ADVANCE_PHASE, "call_adv_2", Map.of(
+                        "target_phase", "CLARIFYING", "rationale", "SECRET-RATIONALE strong start")),
+                LlmEvent.textDelta("What range can the values take?"),
+                LlmEvent.usage(new LlmEvent.Usage(100, 20, 0, 0)),
+                LlmEvent.done()));
+
+        List<String> toolNames = new ArrayList<>();
+        List<Map<String, Object>> toolArgs = new ArrayList<>();
+        StringBuilder prose = new StringBuilder();
+        TurnSink recording = new TurnSink() {
+            @Override public void textDelta(String text) { prose.append(text); }
+            @Override public void toolCall(String name, String id, Map<String, Object> arguments) {
+                toolNames.add(name);
+                toolArgs.add(arguments);
+            }
+            @Override public void phaseAdvanced(RoundPhase phase) {}
+            @Override public void roundCompleted(Long id) {}
+            @Override public void usage(int in, int out, int cacheRead, double cost) {}
+            @Override public void turnComplete(Long id) {}
+            @Override public void error(String message) {}
+        };
+
+        turnOrchestrator.handleCandidateTurn(roundId, "Can values be negative?", null, recording);
+
+        assertThat(toolNames).containsExactly(InterviewerTools.ADVANCE_PHASE);
+        assertThat(toolArgs.get(0)).containsOnlyKeys("target_phase");
+        assertThat(toolArgs.toString()).doesNotContain("SECRET");
+        assertThat(prose.toString()).isEqualTo("Good question about negatives. What range can the values take?");
+
+        // Still applied server-side from the unredacted call.
+        assertThat(signalRepo.findByRoundIdOrderByIdAsc(roundId))
+                .anySatisfy(sig -> assertThat(sig.getEvidence()).contains("SECRET-EVIDENCE"));
+        assertThat(roundRepo.findById(roundId).orElseThrow().getPhase()).isEqualTo(RoundPhase.CLARIFYING);
     }
 
     @Test

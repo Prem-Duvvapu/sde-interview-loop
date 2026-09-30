@@ -377,8 +377,8 @@ export function SetupView({ onStart, onReplay, onOpenDashboard, onOpenSettings, 
                   </div>
                   {mode === 'full_loop' && (
                     <p className="muted small">
-                      Full-loop chaining lands in Phase 6. The backend creates every round now; this client
-                      opens the first one.
+                      Rounds run in the profile’s order. After each round is scored, the next interviewer
+                      receives a private handoff and starts automatically.
                     </p>
                   )}
                   {startError && (

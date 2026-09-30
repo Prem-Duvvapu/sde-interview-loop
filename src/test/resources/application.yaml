@@ -12,6 +12,9 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+    # Match production: lazy associations must fail here if they would fail at runtime
+    # (AGENTS.md invariant 6). Spring Boot's default of true would hide that class of bug.
+    open-in-view: false
 
   flyway:
     enabled: true

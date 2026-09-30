@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VoiceProvider } from '../voice/VoiceProvider';
+import { readStored, writeStored } from '../lib/storage';
 
 interface Props {
+  /** Sending is unavailable (e.g. the socket is down). The draft always stays editable. */
   disabled: boolean;
   disabledReason: string | null;
   awaitingReply: boolean;
-  onSend: (text: string) => void;
+  /**
+   * Returns whether the turn actually left the browser. The draft is cleared only on `true`:
+   * a send refused because the socket dropped must never cost the candidate their answer.
+   */
+  onSend: (text: string) => boolean;
   voice: VoiceProvider;
+  /** Session-storage key for the unsent draft, scoped to one round. */
+  draftKey?: string | null;
 }
 
-const MAX_ROWS_PX = 200;
+const MAX_ROWS_PX = 240;
 
-export function Composer({ disabled, disabledReason, awaitingReply, onSend, voice }: Props) {
-  const [text, setText] = useState('');
+export function Composer({ disabled, disabledReason, awaitingReply, onSend, voice, draftKey = null }: Props) {
+  const [text, setText] = useState(() => (draftKey ? readStored(draftKey, 'session') ?? '' : ''));
   const [listening, setListening] = useState(false);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [sendNotice, setSendNotice] = useState<string | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
-  const dictationPrefixRef = useRef('');
+  const dictationBaseRef = useRef('');
 
   const autoGrow = useCallback(() => {
     const el = areaRef.current;
@@ -27,28 +36,43 @@ export function Composer({ disabled, disabledReason, awaitingReply, onSend, voic
 
   useEffect(autoGrow, [text, autoGrow]);
 
+  // Keep the unsent draft across a reconnect or reload of this round. Best-effort only.
+  useEffect(() => {
+    if (draftKey) writeStored(draftKey, text === '' ? null : text, 'session');
+  }, [draftKey, text]);
+
+  const canSubmit = !disabled && !awaitingReply;
+
   const submit = useCallback(() => {
     const value = text.trim();
-    if (!value || disabled) return;
-    onSend(value);
-    voice.stopListening();
+    if (!value || !canSubmit) return;
+    // Detach dictation *before* sending: a late recognition result must not re-fill the
+    // composer with the answer that was just sent.
+    voice.cancelListening();
     setListening(false);
+    const sent = onSend(value);
+    if (!sent) {
+      setSendNotice('Not sent — the connection is down. Your answer is kept here; send it again once reconnected.');
+      return;
+    }
+    setSendNotice(null);
     setText('');
     requestAnimationFrame(() => areaRef.current?.focus());
-  }, [text, disabled, onSend, voice]);
+  }, [text, canSubmit, onSend, voice]);
 
   const toggleDictation = useCallback(() => {
     if (listening) {
       voice.stopListening();
+      setListening(false);
       return;
     }
     setVoiceNotice(null);
-    dictationPrefixRef.current = text.trimEnd();
+    dictationBaseRef.current = text.trimEnd();
     const started = voice.startListening({
       onUpdate: ({ finalText, interimText }) => {
         const dictated = [finalText, interimText].filter(Boolean).join(' ');
-        const prefix = dictationPrefixRef.current;
-        setText(dictated ? `${prefix}${prefix ? ' ' : ''}${dictated}` : prefix);
+        const base = dictationBaseRef.current;
+        setText(dictated ? `${base}${base ? ' ' : ''}${dictated}` : base);
       },
       onEnd: () => setListening(false),
       onError: (message) => {
@@ -59,12 +83,28 @@ export function Composer({ disabled, disabledReason, awaitingReply, onSend, voic
     if (started) {
       setListening(true);
       window.setTimeout(() => areaRef.current?.focus(), 0);
-    } else {
+    } else if (!voice.supportsRecognition()) {
       setVoiceNotice('Speech recognition is not available in this browser. You can still type your answer.');
     }
   }, [listening, text, voice]);
 
-  useEffect(() => () => voice.stopListening(), [voice]);
+  // Leaving the round (or switching rounds, which remounts this component) ends dictation for good.
+  useEffect(() => () => voice.cancelListening(), [voice]);
+
+  const onChange = useCallback(
+    (value: string) => {
+      if (listening) {
+        // Typing while dictating would be overwritten by the next recognition update, so manual
+        // editing takes over: dictation stops and pending results are discarded.
+        voice.cancelListening();
+        setListening(false);
+        setVoiceNotice('Dictation stopped because you edited the answer. Your text is kept.');
+      }
+      setSendNotice(null);
+      setText(value);
+    },
+    [listening, voice],
+  );
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -76,16 +116,24 @@ export function Composer({ disabled, disabledReason, awaitingReply, onSend, voic
     [submit],
   );
 
+  const isMac = typeof navigator !== 'undefined' && navigator.platform.includes('Mac');
+  const hint = disabled && disabledReason
+    ? <span className="hint-warn">{disabledReason}</span>
+    : awaitingReply
+      ? <span>The interviewer is replying. You can keep drafting; Send unlocks when they finish.</span>
+      : <><kbd>{isMac ? '⌘' : 'Ctrl'}</kbd> + <kbd>Enter</kbd> sends · your current code or diagram goes with it</>;
+
   return (
     <form
       className="composer"
+      aria-label="Your answer"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
       <label className="visually-hidden" htmlFor="composer-input">
-        Your turn
+        Your answer
       </label>
       <textarea
         id="composer-input"
@@ -93,23 +141,14 @@ export function Composer({ disabled, disabledReason, awaitingReply, onSend, voic
         className="composer-input"
         rows={2}
         value={text}
-        placeholder={disabled ? (disabledReason ?? 'Not connected') : 'Think out loud…'}
-        onChange={(e) => setText(e.target.value)}
+        placeholder="Think out loud…"
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        disabled={disabled}
-        spellCheck={false}
+        aria-describedby="composer-hint"
+        spellCheck
       />
       <div className="composer-foot">
-        <span className="composer-hint">
-          {disabled && disabledReason ? (
-            <span className="hint-warn">{disabledReason}</span>
-          ) : (
-            <>
-              <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</kbd> + <kbd>Enter</kbd> to send · the
-              editor buffer goes with it
-            </>
-          )}
-        </span>
+        <span className="composer-hint" id="composer-hint">{hint}</span>
         <div className="composer-actions">
           <button
             type="button"
@@ -121,12 +160,16 @@ export function Composer({ disabled, disabledReason, awaitingReply, onSend, voic
           >
             {listening ? 'Stop mic' : 'Use mic'}
           </button>
-          <button type="submit" className="btn btn-primary" disabled={disabled || text.trim() === ''}>
-            {awaitingReply ? 'Send anyway' : 'Send turn'}
+          <button type="submit" className="btn btn-primary" disabled={!canSubmit || text.trim() === ''}>
+            {awaitingReply ? 'Waiting for reply…' : 'Send'}
           </button>
         </div>
       </div>
-      {voiceNotice && <p className="voice-notice" role="status">{voiceNotice}</p>}
+      <div className="composer-notices" aria-live="polite">
+        {listening && <p className="voice-notice is-live">Listening — dictated text stays editable and is never sent automatically.</p>}
+        {voiceNotice && <p className="voice-notice">{voiceNotice}</p>}
+        {sendNotice && <p className="voice-notice tone-warn">{sendNotice}</p>}
+      </div>
     </form>
   );
 }

@@ -33,6 +33,9 @@ a lesson in them.
 | 11 | 2026-08-22 → 2026-08-29 | Plan specified Zustand + TanStack Query; frontend used neither, plan not corrected | Fixed (docs) | `fba203c` |
 | 12 | 2026-08-23 | Live-testing exhausted the owner's Gemini free-tier quota mid-session | Understood, not "fixable" | documented in `AGENTS.md` |
 | 13 | 2026-09-05 | `start.sh` killed a backend that had actually started, on a false readiness timeout | Fixed | `start.sh` |
+| 14 | 2026-08-29 → 2026-09-30 | Private `record_signal` scores/evidence streamed live into the candidate transcript | Fixed | UI/UX Phase 0/2 increment |
+| 15 | since the web client was written | Every company rendered as its raw id: API sends snake_case profile fields, client read camelCase | Fixed | UI/UX Phase 0/2 increment |
+| 16 | 2026-09-2x → 2026-09-30 | Composer lost drafts on a refused send; late dictation re-filled a sent answer; stuck streaming caret | Fixed | UI/UX Phase 0/2 increment |
 
 ---
 
@@ -412,6 +415,80 @@ Spring Boot Maven plugin does) is not a reliable real-time signal — buffering 
 at a hop the script never sees, and nothing forces a flush until the buffer fills or the
 process exits. When a script's readiness check has a real running service to probe, probe
 the service itself, not a log file about it.
+
+---
+
+## 14 — Private scoring streamed live into the candidate transcript
+
+**What happened.** `TurnOrchestrator` forwarded every model tool call to the client sink
+verbatim. `record_signal` carries a 1–5 score and quoted evidence; `advance_phase`,
+`set_hint_level` and `end_round` carry a free-text `rationale`/`reason`. `TranscriptPane`
+rendered all of it inline (`dimension=… score=4 evidence=…`), so a candidate practising
+could read the interviewer's live scoring notes mid-round.
+
+**Why it was missed.** The H1 walkthrough (2026-09-05) saw it and recorded it as "a real
+behavior … worth a product decision later", not as a defect. It is also invisible in every
+backend test, which used `TurnSink.noop()`.
+
+**Fix.** `TurnOrchestrator.forwardCandidateSafeToolCall` drops `record_signal` entirely and
+forwards only `target_phase` / `level` for the other calls; the unredacted call is still
+parsed, persisted and applied. The client shows plain-language notices instead of raw
+arguments. Regression: `TurnOrchestratorIntegrationTest.privateScoringNeverReachesTheCandidateSink`
+(verified to fail with the old forwarding line restored) and the browser check in
+`web/e2e/interview-lifecycle.spec.ts` that the page HTML never contains the scripted
+provider's `PRIVATE` markers.
+
+**Lesson.** Hiding sensitive data is a transport decision, not a CSS decision: anything in a
+WebSocket frame is visible in devtools. A recording sink in tests is what makes the boundary
+checkable.
+
+---
+
+## 15 — Company names never rendered: snake_case API, camelCase client
+
+**What happened.** `GET /api/profiles` serialises profiles in their YAML shape
+(`display_name`, `target_role.level_code`, `loop.total_wall_clock_min`, `calibration.last_updated`).
+`web/src/api/types.ts` declared `displayName`, `targetRole.levelCode`, … and the client read
+those, so every company rendered as its raw id (`linkedin`), the role/level chips never
+appeared, the loop total was missing, and the interview top bar fell back to the id.
+
+**Why it was missed.** Nothing threw — optional fields were simply `undefined` and every
+component had a fallback. The H1 walkthrough reported the setup screen as "clean" because the
+list looked plausible. It was found when a browser test searched for the button "Google" and
+the snapshot showed `google google`.
+
+**Fix.** `web/src/api/profiles.ts` normalises either spelling at the API boundary;
+`profiles.test.ts` pins the real snake_case payload.
+
+**Lesson.** A type declaration on a `fetch` result is an assertion nobody checks. Normalise at
+the boundary and test against a captured real payload, not a hand-written fixture.
+
+---
+
+## 16 — Composer lifecycle: lost drafts, re-filled answers, stuck streaming caret
+
+**What happened.** Three frontend defects in the live-round screen, each reproduced by a test
+before fixing:
+
+1. `Composer.submit` called a `void` `onSend` and then cleared the draft unconditionally, but
+   `App.handleSend` returned early when the socket was not open — the answer was discarded.
+2. `BrowserVoiceProvider.stopListening()` called `recognition.stop()` without detaching the
+   handlers. Browsers deliver the pending final result *after* `stop()`, and the handler
+   rebuilt the text from its captured prefix, re-filling the composer with the answer that had
+   just been sent.
+3. `turn_complete` finalised only the last chat item; a notice appended between text deltas
+   started a second bubble and left the first with a streaming caret forever.
+
+**Fix.** `onSend` returns whether the frame left the browser and the draft clears only on
+`true` (and is kept in `sessionStorage` per round). Recognition sessions are owned:
+`cancelListening()` detaches handlers and aborts; Send, manual editing, round change and
+unmount all cancel. Deltas continue the turn's open bubble and completion closes all of them
+(`web/src/lib/transcript.ts`). Tests: `Composer.test.tsx`, `VoiceProvider.test.ts`,
+`transcript.test.ts`. The draft-loss and late-result defects were also reproduced against
+the unmodified HEAD components in a throwaway test before the fix.
+
+**Lesson.** A callback-shaped API (`onSend: () => void`, `onresult`) hides ownership. Make the
+outcome a return value and the subscription something that can be revoked.
 
 ---
 
