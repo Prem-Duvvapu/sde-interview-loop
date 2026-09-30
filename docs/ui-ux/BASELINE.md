@@ -34,11 +34,11 @@ excepted).
 
 | Defect | Reproduced by | Fixed / guarded by | RCA |
 |---|---|---|---|
-| Refused send wiped the draft | throwaway test against HEAD `Composer` (passed = defect) | `Composer.test.tsx` | #16 |
-| Late dictation result re-filled a sent answer | throwaway test against HEAD `Composer` + `VoiceProvider` | `Composer.test.tsx`, `VoiceProvider.test.ts` | #16 |
-| Streaming caret stuck when a notice interleaved deltas | source reading; unit test of reducer | `transcript.test.ts` | #16 |
-| `record_signal` score/evidence + rationales streamed to the client | backend test fails with the old forwarding line | `TurnOrchestratorIntegrationTest.privateScoringNeverReachesTheCandidateSink`, browser HTML check | #14 |
-| Company names rendered as raw ids (snake_case API vs camelCase client) | browser snapshot showed `google google` | `profiles.test.ts` | #15 |
+| Refused send wiped the draft | throwaway test against HEAD `Composer` (passed = defect) | `Composer.test.tsx` | #17 |
+| Late dictation result re-filled a sent answer | throwaway test against HEAD `Composer` + `VoiceProvider` | `Composer.test.tsx`, `VoiceProvider.test.ts` | #17 |
+| Streaming caret stuck when a notice interleaved deltas | source reading; unit test of reducer | `transcript.test.ts` | #17 |
+| `record_signal` score/evidence + rationales streamed to the client | backend test fails with the old forwarding line | `TurnOrchestratorIntegrationTest.privateScoringNeverReachesTheCandidateSink`, browser HTML check | #15 |
+| Company names rendered as raw ids (snake_case API vs camelCase client) | browser snapshot showed `google google` | `profiles.test.ts` | #16 |
 | Silent screen for up to ~90s while evaluating (H1 finding) | H1 notes | Completion panel; browser tests for scored, failed-evaluation and full-loop advance | — |
 | "Send anyway" allowed concurrent turns; reconnect copy claimed auto-send | source reading | Send locked while awaiting; honest copy; browser test | — |
 | Unguarded `localStorage` read at startup | source reading | `storage.test.ts` | — |

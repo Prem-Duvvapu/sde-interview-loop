@@ -33,9 +33,10 @@ a lesson in them.
 | 11 | 2026-08-22 → 2026-08-29 | Plan specified Zustand + TanStack Query; frontend used neither, plan not corrected | Fixed (docs) | `fba203c` |
 | 12 | 2026-08-23 | Live-testing exhausted the owner's Gemini free-tier quota mid-session | Understood, not "fixable" | documented in `AGENTS.md` |
 | 13 | 2026-09-05 | `start.sh` killed a backend that had actually started, on a false readiness timeout | Fixed | `start.sh` |
-| 14 | 2026-08-29 → 2026-09-30 | Private `record_signal` scores/evidence streamed live into the candidate transcript | Fixed | UI/UX Phase 0/2 increment |
-| 15 | since the web client was written | Every company rendered as its raw id: API sends snake_case profile fields, client read camelCase | Fixed | UI/UX Phase 0/2 increment |
-| 16 | 2026-09-2x → 2026-09-30 | Composer lost drafts on a refused send; late dictation re-filled a sent answer; stuck streaming caret | Fixed | UI/UX Phase 0/2 increment |
+| 14 | 2026-09-08 | LLD interviewer repeatedly volunteered the class design/code unprompted, even after the candidate flagged it twice | Fixed (prompt only, **not verified live**) | `LldInterviewerModule.java` |
+| 15 | 2026-08-29 → 2026-09-30 | Private `record_signal` scores/evidence streamed live into the candidate transcript | Fixed | UI/UX Phase 0/2 increment |
+| 16 | since the web client was written | Every company rendered as its raw id: API sends snake_case profile fields, client read camelCase | Fixed | UI/UX Phase 0/2 increment |
+| 17 | 2026-09-2x → 2026-09-30 | Composer lost drafts on a refused send; late dictation re-filled a sent answer; stuck streaming caret | Fixed | UI/UX Phase 0/2 increment |
 
 ---
 
@@ -418,7 +419,60 @@ the service itself, not a log file about it.
 
 ---
 
-## 14 — Private scoring streamed live into the candidate transcript
+## 14 — LLD interviewer repeatedly volunteered the class design/code unprompted
+
+**What happened.** The owner pasted a live LLD round transcript (parking-garage question).
+On the candidate's very first clarifying question ("one floor or multiple floors?"), the
+interviewer answered — then, unprompted, went on to enumerate the full entity list and
+write out complete Java for `Vehicle`, `ParkingSpot`, `Level` (including adjacency-scan
+logic for the bus requirement), and `Garage`, mid-`REQUIREMENTS` phase, before the
+candidate had written a single line. The candidate called it out ("why did you gave the
+answer?"); the interviewer apologised and reset. Two turns later, once the candidate said
+"requirements are clear," the interviewer did it again — this time as prose instead of
+code, but still narrating its own full entity breakdown (`Vehicle`, `ParkingSpot`, `Level`,
+`Garage`, `Ticket`, `Receipt`, `PricingStrategy`) and design reasoning (bus adjacency,
+thread safety) before asking "should I start with Vehicle and ParkingSpot?" — functionally
+the same violation, softened in form, immediately after being corrected.
+
+**Root cause.** `LldInterviewerModule.persona()` already said "Ask, don't tell... Never
+hand them the class model unprompted," and the `REQUIREMENTS` phase directive said to
+answer clarifying questions "directly" — but neither said what *not* to do after answering:
+nothing stopped the model from following a direct answer with its own unprompted design
+narration, and nothing told it that "requirements are clear" should be handed back to the
+candidate rather than answered with the interviewer's own approach. There was also no
+instruction covering the recovery case — being told directly "why did you give the answer"
+produced an apology, not a change in the underlying tendency, which resurfaced within two
+turns in a softened form.
+
+**Fix.** Strengthened `LldInterviewerModule.persona()` and the `REQUIREMENTS`/`CLASS_MODEL`
+phase directives: explicitly forbid volunteering an entity/class list or approach outline
+in any form, require answering a clarifying question and then stopping, require handing
+"requirements are clear" back to the candidate with an open prompt instead of the
+interviewer's own approach, and — matching what actually failed here — require that a
+candidate calling out a given-away answer be treated as a real correction: stop entirely,
+do not restate a shorter version of the same design in the next turn.
+
+**Verification note.** Compiles, and the full suite (91 tests) still passes — but this is a
+**prompt-only change, not verified against a live model.** Per incident 4's lesson, prompt
+wording alone is not always sufficient to change a trained tendency; that incident needed a
+mechanical backend retry as a second layer because the failure mode was structurally
+detectable (tool calls with zero text). This failure mode — narrating an unrequested design
+— is not mechanically detectable the same way without another LLM call, so a stronger
+prompt is the only lever available here. **Re-run this exact LLD scenario live once quota
+allows, and watch specifically for the "answer, then keep talking" and
+"corrected-then-recurs-softened" patterns** before treating this as closed.
+
+**Open question, not yet acted on.** `DsaInterviewerModule`, `HldInterviewerModule`,
+`CsfInterviewerModule`, `JavaDeepDiveInterviewerModule`, `BehavioralInterviewerModule`, and
+`ResumeInterviewerModule` all carry the identical "Ask, don't tell... Never hand them X
+unprompted" boilerplate that failed here, and none of them have this incident's specific
+strengthening yet. This transcript is evidence for LLD only — flagging the other six as
+sharing the same wording and plausibly the same weakness, not claiming they've been
+observed to fail the same way.
+
+---
+
+## 15 — Private scoring streamed live into the candidate transcript
 
 **What happened.** `TurnOrchestrator` forwarded every model tool call to the client sink
 verbatim. `record_signal` carries a 1–5 score and quoted evidence; `advance_phase`,
@@ -444,7 +498,7 @@ checkable.
 
 ---
 
-## 15 — Company names never rendered: snake_case API, camelCase client
+## 16 — Company names never rendered: snake_case API, camelCase client
 
 **What happened.** `GET /api/profiles` serialises profiles in their YAML shape
 (`display_name`, `target_role.level_code`, `loop.total_wall_clock_min`, `calibration.last_updated`).
@@ -465,7 +519,7 @@ the boundary and test against a captured real payload, not a hand-written fixtur
 
 ---
 
-## 16 — Composer lifecycle: lost drafts, re-filled answers, stuck streaming caret
+## 17 — Composer lifecycle: lost drafts, re-filled answers, stuck streaming caret
 
 **What happened.** Three frontend defects in the live-round screen, each reproduced by a test
 before fixing:

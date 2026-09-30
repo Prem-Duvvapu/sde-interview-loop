@@ -268,7 +268,7 @@ class TurnOrchestratorIntegrationTest {
     }
 
     /**
-     * Regression (RCA #14): record_signal scores/evidence and control-call rationales used to
+     * Regression (RCA #15): record_signal scores/evidence and control-call rationales used to
      * be streamed verbatim to the candidate's transcript. They must still be persisted and
      * applied, but the client-facing sink must never see them.
      */

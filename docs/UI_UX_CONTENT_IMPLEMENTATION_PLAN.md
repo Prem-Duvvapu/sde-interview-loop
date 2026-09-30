@@ -6,7 +6,7 @@ Prepared 2026-09-30 for the implementing agent selected by the owner (Opus 5.5).
 
 | Date | Increment | Status | Evidence |
 |---|---|---|---|
-| 2026-09-30 | Phase 0 harness (vitest + Playwright + scripted e2e backend) and Phase 2 P0 lifecycle fixes (send outcome, drafts, voice ownership, streaming finalisation, completion/evaluation states, private-scoring redaction, profile field normalisation) | Done for desktop; **mobile gate failing** | `docs/ui-ux/BASELINE.md`; RCA #14–#16 |
+| 2026-09-30 | Phase 0 harness (vitest + Playwright + scripted e2e backend) and Phase 2 P0 lifecycle fixes (send outcome, drafts, voice ownership, streaming finalisation, completion/evaluation states, private-scoring redaction, profile field normalisation) | Done for desktop; **mobile gate failing** | `docs/ui-ux/BASELINE.md`; RCA #15–#17 |
 
 Remaining next: Phase 1 design tokens + responsive shell (fixes the mobile Send gate), baseline
 screenshots, Phase 3 routes/refresh recovery, then Phases 4–8 as written below.

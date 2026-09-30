@@ -4,7 +4,7 @@ import type { CompanyProfile, ProfileRound } from './types';
  * The backend serialises profiles exactly as the YAML is written (snake_case: `display_name`,
  * `target_role.level_code`, `loop.total_wall_clock_min`, …) while the client types are
  * camelCase. Before this normaliser existed every company rendered as its raw id and the
- * level/role chips never appeared (RCA #15). Accept either spelling so a later backend change
+ * level/role chips never appeared (RCA #16). Accept either spelling so a later backend change
  * to camelCase cannot silently break the UI again.
  */
 type Raw = Record<string, unknown>;
