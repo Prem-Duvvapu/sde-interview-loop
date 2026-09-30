@@ -10,6 +10,7 @@ import com.premd.interviewloop.domain.repository.SignalRepository;
 import com.premd.interviewloop.evaluation.RoundEvaluator;
 import com.premd.interviewloop.interviewer.ControlCall;
 import com.premd.interviewloop.interviewer.InterviewerModule;
+import com.premd.interviewloop.interviewer.InterviewerTools;
 import com.premd.interviewloop.interviewer.ModuleRegistry;
 import com.premd.interviewloop.interviewer.QuestionSelection;
 import com.premd.interviewloop.interviewer.RoundContext;
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -231,7 +233,7 @@ public class TurnOrchestrator {
                     }
                     case TOOL_CALL -> {
                         LlmEvent.ToolCall call = event.getToolCall();
-                        sink.toolCall(call.name(), call.id(), call.arguments());
+                        forwardCandidateSafeToolCall(call, sink);
                         controlCalls.add(ControlCall.parse(call.name(), call.arguments()));
                     }
                     case USAGE -> usage = event.getUsage();
@@ -277,6 +279,29 @@ public class TurnOrchestrator {
         }
 
         sink.turnComplete(roundId);
+    }
+
+    /**
+     * The sink faces the candidate, so private scoring must never reach it. {@code record_signal}
+     * carries a score and quoted evidence, and {@code end_round}'s reason is an evaluative
+     * judgement — showing either mid-round turns practice into reading the interviewer's notes.
+     * Both are still parsed and applied from the unredacted call; only the client copy changes.
+     * Hiding these in CSS would not be enough: the frame itself is visible in devtools.
+     */
+    static void forwardCandidateSafeToolCall(LlmEvent.ToolCall call, TurnSink sink) {
+        String name = call.name();
+        if (InterviewerTools.RECORD_SIGNAL.equals(name)) {
+            return;
+        }
+        Map<String, Object> visible = new LinkedHashMap<>();
+        if (InterviewerTools.ADVANCE_PHASE.equals(name) && call.arguments() != null
+                && call.arguments().get("target_phase") != null) {
+            visible.put("target_phase", call.arguments().get("target_phase"));
+        } else if (InterviewerTools.SET_HINT_LEVEL.equals(name) && call.arguments() != null
+                && call.arguments().get("level") != null) {
+            visible.put("level", call.arguments().get("level"));
+        }
+        sink.toolCall(name, call.id(), visible);
     }
 
     private void applyControlCalls(Long roundId, List<ControlCall> calls,

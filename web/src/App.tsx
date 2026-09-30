@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { completeRound, createSession, describeError, getSession, startRound } from './api/client';
+import { ApiError, completeRound, createSession, describeError, getRoundEvaluation, getSession, getTranscript, startRound } from './api/client';
 import type { CompanyProfile, InterviewSession, ModuleTypeId, SessionModeId, SessionRound } from './api/types';
 import { EMPTY_USAGE, nextId, type ChatItem, type UsageTotals } from './lib/chat';
+import {
+  appendInterviewerDelta,
+  conversationLength,
+  describeControlCall,
+  finalizeStreaming,
+  itemsFromTranscript,
+} from './lib/transcript';
+import { readStored, writeStored } from './lib/storage';
+import type { Completion } from './lib/completion';
 import { defaultLanguageFor, isModuleType } from './lib/phases';
 import { useInterviewSocket } from './ws/useInterviewSocket';
 import type { OutboundFrame, ParsedFrame } from './ws/frames';
@@ -10,7 +19,7 @@ import { InterviewView } from './components/InterviewView';
 import { ReplayView } from './components/ReplayView';
 import { DashboardView } from './components/DashboardView';
 import { SettingsOverlay } from './components/SettingsOverlay';
-import { BrowserVoiceProvider, plainTextForSpeech } from './voice/VoiceProvider';
+import { BrowserVoiceProvider, plainTextForSpeech, type SpeechState } from './voice/VoiceProvider';
 import { GENERAL_PRACTICE_LABEL, isGeneralPractice } from './lib/generalPractice';
 
 type View =
@@ -33,6 +42,7 @@ export function App() {
   const [usage, setUsage] = useState<UsageTotals>(EMPTY_USAGE);
   const [awaitingReply, setAwaitingReply] = useState(false);
   const [roundComplete, setRoundComplete] = useState(false);
+  const [completion, setCompletionState] = useState<Completion>({ state: 'active' });
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
 
   const [language, setLanguage] = useState('java');
@@ -40,7 +50,8 @@ export function App() {
 
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [ttsEnabled, setTtsEnabled] = useState(() => window.localStorage.getItem('voice.readReplies') === 'true');
+  const [ttsEnabled, setTtsEnabled] = useState(() => readStored('voice.readReplies') === 'true');
+  const [speechState, setSpeechState] = useState<SpeechState>('idle');
 
   /** The editor buffer. A ref on purpose — keystrokes must not re-render the transcript. */
   const bufferRef = useRef('');
@@ -52,9 +63,27 @@ export function App() {
   const beginNextRoundRef = useRef<((next: SessionRound, skippedRoundOrdinals?: number[]) => Promise<void>) | null>(null);
   const reportedUnknownFramesRef = useRef<Set<string>>(new Set());
   const currentInterviewerReplyRef = useRef('');
+  /** True once this round's socket has opened at least once; a later open is a reconnect. */
+  const hadOpenForRoundRef = useRef<number | null>(null);
+  const itemsRef = useRef<ChatItem[]>([]);
   const voiceRef = useRef<BrowserVoiceProvider | null>(null);
   if (!voiceRef.current) voiceRef.current = new BrowserVoiceProvider();
   const voice = voiceRef.current;
+
+  useEffect(() => voice.onSpeechStateChange(setSpeechState), [voice]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  // Mirrored in a ref so frame handlers read the latest state even between renders.
+  const completionRef = useRef<Completion>(completion);
+  const setCompletion = useCallback((next: Completion) => {
+    completionRef.current = next;
+    setCompletionState(next);
+  }, []);
+
+  /** Frames that name a round are ignored once the client has moved on to another round. */
+  const isCurrentRound = (frameRoundId: number | null) =>
+    frameRoundId === null || frameRoundId === roundIdRef.current;
 
   const pushItem = useCallback((item: ChatItem) => setItems((prev) => [...prev, item]), []);
 
@@ -63,6 +92,24 @@ export function App() {
       pushItem({ id: nextId('sys'), kind: 'system', at: Date.now(), text, tone }),
     [pushItem],
   );
+
+  /**
+   * Resolves the scoring outcome for a completed round from the server rather than guessing it
+   * from a timeout. A 404 means no evaluation was stored — the evaluator failed or is unavailable.
+   */
+  const resolveEvaluation = useCallback(async (roundId: number) => {
+    try {
+      const evaluation = await getRoundEvaluation(roundId);
+      if (roundIdRef.current !== roundId) return;
+      setCompletion({ state: 'evaluated', roundId, evaluation });
+    } catch (err: unknown) {
+      if (roundIdRef.current !== roundId) return;
+      const message = err instanceof ApiError && err.isUnavailable
+        ? 'Scoring did not finish for this round — the evaluator may be unavailable or out of quota. Your transcript is saved and can still be reviewed.'
+        : `Could not load this round’s score: ${describeError(err)}`;
+      setCompletion({ state: 'evaluation_unavailable', roundId, message });
+    }
+  }, [setCompletion]);
 
   // ------------------------------------------------------------ frame handling
 
@@ -90,47 +137,40 @@ export function App() {
           break;
 
         case 'turn_ack':
+          if (!isCurrentRound(frame.roundId)) break;
           currentInterviewerReplyRef.current = '';
+          setItems(finalizeStreaming);
           setAwaitingReply(true);
           break;
 
         case 'text_delta':
           currentInterviewerReplyRef.current += frame.text;
-          setItems((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.kind === 'interviewer' && last.streaming) {
-              const updated: ChatItem = { ...last, text: last.text + frame.text };
-              return [...prev.slice(0, -1), updated];
-            }
-            return [
-              ...prev,
-              { id: nextId('int'), kind: 'interviewer', at: Date.now(), text: frame.text, streaming: true },
-            ];
-          });
+          setItems((prev) => appendInterviewerDelta(prev, frame.text));
           break;
 
-        case 'turn_complete':
-          setItems((prev) => {
-            const last = prev[prev.length - 1];
-            if (last && last.kind === 'interviewer' && last.streaming) {
-              return [...prev.slice(0, -1), { ...last, streaming: false }];
-            }
-            return prev;
-          });
+        case 'turn_complete': {
+          if (!isCurrentRound(frame.roundId)) break;
+          setItems(finalizeStreaming);
           if (ttsEnabled) voice.speak(plainTextForSpeech(currentInterviewerReplyRef.current));
           currentInterviewerReplyRef.current = '';
           setAwaitingReply(false);
+          // The orchestrator evaluates synchronously after end_round, so this turn's completion
+          // is the moment the evaluation outcome is known.
+          const completedId = frame.roundId ?? roundIdRef.current;
+          const current = completionRef.current;
+          if (current.state === 'evaluating' && current.via === 'interviewer' && current.roundId === completedId) {
+            void resolveEvaluation(current.roundId);
+          }
           break;
+        }
 
-        case 'tool_call':
-          pushItem({
-            id: nextId('tool'),
-            kind: 'tool',
-            at: Date.now(),
-            name: frame.name,
-            args: frame.arguments,
-          });
+        case 'tool_call': {
+          // The backend strips private arguments (and never sends record_signal); show only a
+          // plain-language notice for the calls a candidate would notice in a real interview.
+          const notice = describeControlCall(frame.name, frame.arguments);
+          if (notice) pushSystem(notice, 'info');
           break;
+        }
 
         case 'phase_advanced':
           setPhase(frame.phase);
@@ -142,17 +182,24 @@ export function App() {
           setRoundComplete(false);
           break;
 
-        case 'round_completed':
+        case 'round_completed': {
+          if (!isCurrentRound(frame.roundId)) break;
+          const completedId = frame.roundId ?? roundIdRef.current;
           setRoundComplete(true);
-          setAwaitingReply(false);
-          pushSystem('Round complete.', 'info');
+          voice.cancelListening();
+          pushSystem('The interviewer ended the round.', 'info');
+          if (completedId !== null) {
+            setCompletion({ state: 'evaluating', roundId: completedId, via: 'interviewer', since: Date.now() });
+          }
           break;
+        }
 
         case 'next_round_ready':
           if (!frame.round) {
             pushSystem('The next round was prepared, but its details were unreadable. Return to Sessions and resume it there.', 'warn');
             break;
           }
+          setCompletion({ state: 'next_round', ordinal: frame.round.ordinal });
           void beginNextRoundRef.current?.(frame.round, frame.skippedRoundOrdinals);
           break;
 
@@ -179,20 +226,44 @@ export function App() {
         }
       }
     },
-    [pushItem, pushSystem, ttsEnabled, voice],
+    [pushSystem, resolveEvaluation, ttsEnabled, voice],
   );
 
   const socketEnabled = view.kind === 'interview' && round !== null;
 
+  /**
+   * After a reconnect, a reply may have been persisted while no socket was listening. The
+   * server transcript is the source of truth; rebuild from it when it has turns we do not.
+   */
+  const rehydrateTranscript = useCallback(async (roundId: number) => {
+    try {
+      const turns = await getTranscript(roundId);
+      if (roundIdRef.current !== roundId || !Array.isArray(turns)) return;
+      const restored = itemsFromTranscript(turns);
+      if (restored.length > conversationLength(itemsRef.current)) {
+        setItems([
+          ...restored,
+          { id: nextId('sys'), kind: 'system', at: Date.now(), text: 'Reconnected — the conversation was restored from the server.', tone: 'info' },
+        ]);
+        setAwaitingReply(false);
+      }
+    } catch {
+      /* the socket is back; a failed restore just leaves what is on screen */
+    }
+  }, []);
+
   const handleSocketOpen = useCallback(() => {
     const id = roundIdRef.current;
     if (id === null) return;
+    const isReconnect = hadOpenForRoundRef.current === id;
+    hadOpenForRoundRef.current = id;
+    if (isReconnect) void rehydrateTranscript(id);
     if (startSentForRoundRef.current === id) return;
     startSentForRoundRef.current = id;
     // Announce the round on the socket the backend will stream on. The REST start call
     // has already moved the round into IN_PROGRESS; this binds it to this connection.
     sendRef.current?.({ type: 'start_round', roundId: id });
-  }, []);
+  }, [rehydrateTranscript]);
 
   const handleSocketClose = useCallback(
     (wasClean: boolean) => {
@@ -221,6 +292,7 @@ export function App() {
     setPhase(initialPhase);
     setAwaitingReply(false);
     setRoundComplete(false);
+    setCompletion({ state: 'active' });
     setStartedAtMs(Date.now());
     setLanguage(defaultLanguageFor(module));
     setResetToken((t) => t + 1);
@@ -228,7 +300,9 @@ export function App() {
     reportedUnknownFramesRef.current = new Set();
     startSentForRoundRef.current = null;
     currentInterviewerReplyRef.current = '';
+    hadOpenForRoundRef.current = null;
     voice.cancelSpeech();
+    voice.cancelListening();
   }, [voice]);
 
   const beginNextRound = useCallback(
@@ -342,17 +416,14 @@ export function App() {
   );
 
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string): boolean => {
       const id = roundIdRef.current;
-      if (id === null) return;
+      if (id === null) return false;
       const buffer = bufferRef.current;
       const artifact = buffer.trim() === '' ? null : buffer;
 
       const sent = socket.send({ type: 'candidate_turn', roundId: id, text, artifact });
-      if (!sent) {
-        pushSystem('Turn not sent — the socket is not open. It will retry connecting.', 'warn');
-        return;
-      }
+      if (!sent) return false;
 
       pushItem({
         id: nextId('cand'),
@@ -362,23 +433,30 @@ export function App() {
         artifactChars: artifact ? artifact.length : 0,
       });
       setAwaitingReply(true);
+      return true;
     },
-    [pushItem, pushSystem, socket],
+    [pushItem, socket],
   );
 
   const handleEndRound = useCallback(async () => {
     const current = round;
     if (!current || !session) return;
     setRoundComplete(true);
+    voice.cancelListening();
+    setCompletion({ state: 'evaluating', roundId: current.id, via: 'candidate', since: Date.now() });
     try {
+      // The REST call returns only after the evaluator has run (or failed), so the waiting
+      // state above covers the whole scoring time instead of a silent screen.
       const updated = await completeRound(session.id, current.id);
       if (updated) setRound(updated);
-      pushSystem('Round marked complete.', 'info');
+      pushSystem('You ended the round.', 'info');
+      await resolveEvaluation(current.id);
       if (session.mode === 'FULL_LOOP') {
         const refreshed = await getSession(session.id);
         setSession(refreshed);
         const next = (refreshed.rounds ?? []).find((candidate) => candidate.status === 'PENDING');
         if (next) {
+          setCompletion({ state: 'next_round', ordinal: next.ordinal });
           const skipped = (refreshed.rounds ?? [])
             .filter((candidate) => candidate.ordinal > current.ordinal && candidate.ordinal < next.ordinal && candidate.status === 'SKIPPED')
             .map((candidate) => candidate.ordinal);
@@ -386,9 +464,12 @@ export function App() {
         }
       }
     } catch (err: unknown) {
-      pushSystem(`Could not mark the round complete: ${describeError(err)}`, 'warn');
+      // The round may or may not have completed server-side; let the candidate carry on or retry.
+      setRoundComplete(false);
+      setCompletion({ state: 'active' });
+      pushSystem(`Could not end the round: ${describeError(err)}. Your work is kept — try again.`, 'warn');
     }
-  }, [round, session, pushSystem, beginNextRound]);
+  }, [round, session, pushSystem, beginNextRound, resolveEvaluation, voice]);
 
   const handleExit = useCallback(() => {
     roundIdRef.current = null;
@@ -396,14 +477,16 @@ export function App() {
     startSentForRoundRef.current = null;
     setRound(null);
     setSession(null);
+    hadOpenForRoundRef.current = null;
     voice.cancelSpeech();
+    voice.cancelListening();
     setView({ kind: 'setup' });
   }, [voice]);
 
   const handleToggleTts = useCallback(() => {
     setTtsEnabled((enabled) => {
       const next = !enabled;
-      window.localStorage.setItem('voice.readReplies', String(next));
+      writeStored('voice.readReplies', String(next));
       if (!next) voice.cancelSpeech();
       return next;
     });
@@ -433,6 +516,13 @@ export function App() {
         <InterviewView
           profile={profile}
           round={round}
+          completion={completion}
+          onReviewRound={(roundId) => {
+            handleExit();
+            setView({ kind: 'replay', roundId });
+          }}
+          speechState={speechState}
+          onStopSpeech={() => voice.cancelSpeech()}
           roundCount={session?.rounds?.length ?? 1}
           moduleType={moduleType}
           phase={phase}

@@ -1098,3 +1098,57 @@ kbd {
   .metric-card { min-height: 108px; }
   .section-title { align-items: start; flex-direction: column; gap: 3px; }
 }
+
+/* ---------------------------------------------------------- round completion & confirmations */
+
+.btn-danger-ghost { background: transparent; color: #f0a493; border-color: rgba(224, 106, 82, 0.45); }
+.btn-danger-ghost:hover:not(:disabled) { background: rgba(224, 106, 82, 0.14); }
+
+.confirm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  background: rgba(251, 191, 36, 0.08);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--text);
+}
+.confirm-bar p { margin: 0; }
+.confirm-actions { display: flex; gap: 8px; }
+
+.completion {
+  border-top: 1px solid var(--line);
+  padding: 16px 18px;
+  background: var(--panel);
+  display: grid;
+  gap: 10px;
+}
+.completion.tone-warn { border-top-color: rgba(251, 191, 36, 0.55); }
+.completion-head { display: flex; align-items: center; gap: 10px; }
+.completion-title { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--text-strong); }
+.completion-sub { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.completion-body { color: var(--text); max-width: 70ch; }
+.completion-meta { color: var(--muted); font-size: 12px; }
+.completion-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.completion-columns ul { margin: 0; padding-left: 18px; }
+.completion-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 900ms linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; border-top-color: var(--accent); }
+}
+
+.composer-notices:empty { display: none; }
+.voice-notice.is-live { color: var(--accent-bright); }
+.voice-notice.tone-warn { color: var(--warn); }

@@ -7,6 +7,7 @@ import type {
   KeyMutationResult,
   ProviderInfo,
   ReadinessResult,
+  RoundEvaluation,
   ResumeInfo,
   SessionRound,
   SessionReport,
@@ -14,6 +15,7 @@ import type {
   TranscriptTurn,
   VerifyResult,
 } from './types';
+import { normalizeProfile } from './profiles';
 
 /**
  * Every failure the UI can encounter, classified so screens can render a
@@ -116,7 +118,10 @@ function extractMessage(body: string): string | null {
 
 // ---------- profiles ----------
 
-export const listProfiles = () => request<CompanyProfile[]>('/api/profiles');
+export const listProfiles = async (): Promise<CompanyProfile[]> => {
+  const raw = await request<unknown>('/api/profiles');
+  return Array.isArray(raw) ? raw.map(normalizeProfile) : [];
+};
 
 // ---------- sessions ----------
 
@@ -132,6 +137,10 @@ export const startRound = (sessionId: number, roundId: number) =>
 
 export const completeRound = (sessionId: number, roundId: number) =>
   request<SessionRound>(`/api/sessions/${sessionId}/rounds/${roundId}/complete`, { method: 'POST' });
+
+/** 404 (`unavailable`) means "not evaluated (yet)", which callers must treat as a state, not a crash. */
+export const getRoundEvaluation = (roundId: number) =>
+  request<RoundEvaluation>(`/api/rounds/${roundId}/evaluation`);
 
 export const getSessionReport = (sessionId: number) =>
   request<SessionReport>(`/api/sessions/${sessionId}/report`);

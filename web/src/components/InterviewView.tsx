@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { CompanyProfile, ModuleTypeId, SessionRound } from '../api/types';
 import type { ChatItem, UsageTotals } from '../lib/chat';
 import type { SocketState } from '../ws/useInterviewSocket';
@@ -11,12 +11,18 @@ import { EditorPane } from './EditorPane';
 import { DiagramPane } from './DiagramPane';
 import { Composer } from './Composer';
 import { StatusBar } from './StatusBar';
-import type { VoiceProvider } from '../voice/VoiceProvider';
+import type { SpeechState, VoiceProvider } from '../voice/VoiceProvider';
+import type { Completion } from '../lib/completion';
+import { CompletionPanel } from './CompletionPanel';
 import { GENERAL_PRACTICE_LABEL } from '../lib/generalPractice';
 
 interface Props {
   profile: CompanyProfile | null;
   round: SessionRound;
+  completion: Completion;
+  onReviewRound: (roundId: number) => void;
+  speechState: SpeechState;
+  onStopSpeech: () => void;
   roundCount: number;
   moduleType: ModuleTypeId;
   phase: string;
@@ -30,7 +36,7 @@ interface Props {
   resetToken: number;
   onLanguageChange: (l: string) => void;
   onBufferChange: (v: string) => void;
-  onSend: (text: string) => void;
+  onSend: (text: string) => boolean;
   onEndRound: () => void;
   onExit: () => void;
   onOpenSettings: () => void;
@@ -44,6 +50,10 @@ export function InterviewView(props: Props) {
   const {
     profile,
     round,
+    completion,
+    onReviewRound,
+    speechState,
+    onStopSpeech,
     roundCount,
     moduleType,
     phase,
@@ -67,6 +77,7 @@ export function InterviewView(props: Props) {
     onToggleTts,
   } = props;
 
+  const [confirmingEnd, setConfirmingEnd] = useState(false);
   const now = useTicker(1000, startedAtMs !== null && !roundComplete);
   const planned = round.plannedDurationSec ?? null;
 
@@ -84,13 +95,12 @@ export function InterviewView(props: Props) {
   }, [now, startedAtMs, planned]);
 
   const canSend = socket.status === 'open' && !roundComplete;
-  const disabledReason = roundComplete
-    ? 'This round is finished.'
-    : socket.status === 'open'
-      ? null
-      : socket.status === 'reconnecting'
-        ? 'Reconnecting — your turn will send once the socket is back.'
-        : 'Not connected to the backend.';
+  const disabledReason = socket.status === 'open'
+    ? null
+    : socket.status === 'reconnecting' || socket.status === 'connecting'
+      ? 'Connecting… your draft is kept here; Send unlocks once the connection is back.'
+      : 'Not connected to the backend. Your draft is kept here.';
+  const isFullLoop = roundCount > 1;
 
   return (
     <div className="app-shell">
@@ -127,16 +137,45 @@ export function InterviewView(props: Props) {
           >
             {ttsEnabled ? 'Voice on' : 'Voice off'}
           </button>
+          {speechState === 'speaking' && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onStopSpeech}>
+              Stop reading
+            </button>
+          )}
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onEndRound}
-            disabled={roundComplete}
+            className="btn btn-danger-ghost btn-sm"
+            onClick={() => setConfirmingEnd(true)}
+            disabled={roundComplete || confirmingEnd}
           >
             End round
           </button>
         </div>
       </header>
+
+      {confirmingEnd && !roundComplete && (
+        <div className="confirm-bar" role="alertdialog" aria-labelledby="confirm-end-title" aria-describedby="confirm-end-body">
+          <p>
+            <strong id="confirm-end-title">End this round now?</strong>{' '}
+            <span id="confirm-end-body">It will be scored on what you have said and written so far. This cannot be undone.</span>
+          </p>
+          <div className="confirm-actions">
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => {
+                setConfirmingEnd(false);
+                onEndRound();
+              }}
+            >
+              End and score
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" autoFocus onClick={() => setConfirmingEnd(false)}>
+              Keep going
+            </button>
+          </div>
+        </div>
+      )}
 
       <PhaseStrip moduleType={moduleType} currentPhase={phase} roundComplete={roundComplete} />
 
@@ -147,13 +186,24 @@ export function InterviewView(props: Props) {
             awaitingReply={awaitingReply}
             roundLabel={`${MODULE_LABELS[moduleType]} · ${items.length} entries`}
           />
-          <Composer
-            disabled={!canSend}
-            disabledReason={disabledReason}
-            awaitingReply={awaitingReply}
-            onSend={onSend}
-            voice={voice}
-          />
+          {roundComplete || completion.state !== 'active' ? (
+            <CompletionPanel
+              completion={completion}
+              isFullLoop={isFullLoop}
+              onReview={onReviewRound}
+              onExit={onExit}
+            />
+          ) : (
+            <Composer
+              key={round.id}
+              disabled={!canSend}
+              disabledReason={disabledReason}
+              awaitingReply={awaitingReply}
+              onSend={onSend}
+              voice={voice}
+              draftKey={`draft.round.${round.id}`}
+            />
+          )}
         </div>
 
         {/* DM-2: HLD works on a structured component graph, not a code buffer. */}

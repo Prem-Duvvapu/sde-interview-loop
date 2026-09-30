@@ -114,6 +114,19 @@ export interface SessionReport {
   narrativeMd: string | null;
 }
 
+/** `GET /api/rounds/{roundId}/evaluation` — mirrors `EvaluationController.EvaluationDto`. */
+export interface RoundEvaluation {
+  rubricVersion: string;
+  evaluatorProvider: string;
+  evaluatorModel: string;
+  comparabilityEpoch: number;
+  scores: Record<string, number>;
+  strengths: string[];
+  gaps: string[];
+  readinessBand: string | null;
+  narrativeMd: string | null;
+}
+
 export interface ReadinessResult {
   band: string | null;
   overallScore: number;
